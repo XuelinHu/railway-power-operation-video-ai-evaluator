@@ -1,0 +1,11 @@
+backend/data/app.db
+backend/data/uploads/*
+!backend/data/uploads/.gitkeep
+backend.log
+backend.pid
+frontend.log
+frontend.pid
+frontend/dist/
+frontend/node_modules/
+__pycache__/
+*.pyc

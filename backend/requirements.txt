@@ -1,0 +1,12 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+sqlmodel==0.0.22
+python-multipart==0.0.19
+pydantic==2.10.3
+
+# Optional real AI backends. Install only on machines that need model inference.
+# ultralytics>=8.3.0
+# opencv-python>=4.10.0
+# mediapipe>=0.10.14
+# openai>=1.59.0
+# MMAction2 is usually installed from its official docs with matching PyTorch/CUDA.
