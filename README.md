@@ -1,5 +1,14 @@
 # 铁道供电作业视频智能评价与实训考核平台 V1.0
 
+<p align="center">
+  <img height="20" src="https://img.shields.io/badge/vue-3.5.13-42B883?logo=vuedotjs&amp;logoColor=white" />
+  <img height="20" src="https://img.shields.io/badge/vite-6.0.3-646CFF?logo=vite&amp;logoColor=white" />
+  <img height="20" src="https://img.shields.io/badge/fastapi-0.115.6-009688?logo=fastapi&amp;logoColor=white" />
+  <img height="20" src="https://img.shields.io/badge/sqlmodel-0.0.22-E92063" />
+  <img height="20" src="https://img.shields.io/badge/sqlite-used-003B57?logo=sqlite&amp;logoColor=white" />
+  <img height="20" src="https://img.shields.io/badge/ultralytics-optional-111F68" />
+</p>
+
 这是一个可运行的 MVP 项目，用于演示“视频理解 AI + 铁道供电作业知识库 + 规则评分引擎 + 多模态解释生成 + 平台管理”的核心闭环。
 
 当前版本重点完成项目骨架和核心业务流程：
