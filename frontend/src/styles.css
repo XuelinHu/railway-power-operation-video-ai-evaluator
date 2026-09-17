@@ -375,3 +375,298 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   登录 / 首登改密 / 角色界面新增的样式
+   --------------------------------------------------------------------------- */
+
+.boot-screen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  color: var(--muted, #6b7280);
+}
+
+.login-shell {
+  display: grid;
+  min-height: 100vh;
+  padding: 24px;
+  place-items: center;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+  display: grid;
+  gap: 14px;
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.login-hint {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.login-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.9rem;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.whoami {
+  display: grid;
+  font-size: 0.9rem;
+  text-align: right;
+}
+
+.whoami small {
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+/* 提示信息可能带换行（例如初始密码那一整段），必须保留换行。 */
+.message {
+  white-space: pre-line;
+}
+
+.demo-banner {
+  margin: 0 0 14px;
+  padding: 12px 16px;
+  border: 1px solid #fbbf24;
+  border-radius: 12px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.tab-list {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tab-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.12);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.tab-button.active {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+/* 徽标：三态语义在界面上的落点。
+   "看不见"必须和"做错了"用不同的颜色，否则老师会把没拍到当成没做。 */
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badge.ok {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.badge.bad {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.badge.unknown {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.badge.human {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.badge.warn {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.progress-bar {
+  overflow: hidden;
+  height: 8px;
+  margin: 10px 0 6px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.25);
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #2563eb;
+  transition: width 0.25s ease;
+}
+
+.score-card {
+  padding: 18px;
+  border-radius: 14px;
+  line-height: 1.6;
+}
+
+.score-card.failed {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+/* "暂无分数"用中性色，绝不用红色——它表达的是"无法判断"，不是"做错了"。 */
+.score-card.pending {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: #f8fafc;
+  color: #334155;
+}
+
+.score-card h3 {
+  margin: 0 0 6px;
+}
+
+.score-card p {
+  margin: 0;
+}
+
+.frame-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.frame-thumb {
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.frame-thumb img {
+  width: 92px;
+  height: 54px;
+  object-fit: cover;
+}
+
+.frame-thumb:hover {
+  border-color: #2563eb;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ghost-button.tiny,
+.primary-button.tiny {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+.link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #2563eb;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.inline-button {
+  display: inline-block;
+  margin-top: 10px;
+  text-decoration: none;
+}
+
+.violation.dismissed {
+  opacity: 0.6;
+  text-decoration-color: #94a3b8;
+}
+
+.finalize-box,
+.appeal-box {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.finalize-box textarea,
+.appeal-box textarea {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.roster-summary {
+  margin-top: 12px;
+}
+
+.roster-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.roster-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* 时间轴上的三态：左border区分"看见并做对/看见没做/没看见" */
+.timeline li.ok {
+  border-left: 3px solid #10b981;
+}
+
+.timeline li.bad {
+  border-left: 3px solid #ef4444;
+}
+
+.timeline li.unknown {
+  border-left: 3px solid #cbd5e1;
+}

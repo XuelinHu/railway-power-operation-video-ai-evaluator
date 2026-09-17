@@ -1,0 +1,45 @@
+[Unit]
+Description=铁道供电作业视频智能评价平台 - API
+Documentation=file:///opt/railway-power/README.md
+After=network.target
+
+[Service]
+Type=simple
+User=railway
+Group=railway
+WorkingDirectory=/opt/railway-power/backend
+
+# .env 里同时有 VLM API Key 和管理员引导口令，权限必须是 600，
+# 且属主只能是运行服务的这个账号。
+EnvironmentFile=/opt/railway-power/.env
+
+ExecStart=/opt/railway-power/backend/.venv/bin/uvicorn app.main:app \
+    --host 0.0.0.0 --port 8090 --proxy-headers --forwarded-allow-ips='*'
+
+Restart=always
+RestartSec=3
+
+# 内存上限不是可选项：这台机器同时跑 API、worker 和 ffmpeg。
+# 没有上限时，一次异常的上传可以让 OOM killer 去杀别的进程
+# （包括 SSH 之外的数据库写入），故障范围会从一个服务扩散到整台机器。
+MemoryMax=1500M
+MemoryHigh=1200M
+
+# worker 要抢 CPU 做转码，API 只需要响应请求，所以 API 优先级更高。
+Nice=-5
+
+# PrivateTmp 会换掉 /tmp。这里显式关掉是因为**排查故障时
+# 我们会去 /tmp 找 ffmpeg 的中间产物**，开了会让人找不到文件而误判。
+PrivateTmp=false
+
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=false
+ReadWritePaths=/opt/railway-power/data
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=railway-api
+
+[Install]
+WantedBy=multi-user.target

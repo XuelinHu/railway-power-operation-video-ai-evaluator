@@ -4,9 +4,21 @@ sqlmodel==0.0.22
 python-multipart==0.0.19
 pydantic==2.10.3
 
+# httpx 既是 FastAPI TestClient 的运行时依赖（缺了 smoke_test.py 直接
+# ModuleNotFoundError），也是 VLM 客户端直连 DashScope 用的 HTTP 库。
+httpx==0.28.1
+
+# 仅开发/测试需要
+pytest==9.1.1
+
+# 说明：VLM 走 DashScope 的 OpenAI 兼容模式，但**不引入 openai SDK**。
+# 我们只需要一个带 base64 图片的 POST，自建 httpx 客户端可以精确控制
+# 「连接 10s / 读取 120s」的超时，并原样保留 request_id 与错误体用于排障——
+# 这两点在 SDK 里都会被包装掉。少一个依赖，学校服务器上就少一类版本冲突。
+
 # Optional real AI backends. Install only on machines that need model inference.
+# 注意：这些适配器已移入 app/services/ai/legacy/，仅作参考，不在生产链路中。
 # ultralytics>=8.3.0
 # opencv-python>=4.10.0
 # mediapipe>=0.10.14
-# openai>=1.59.0
 # MMAction2 is usually installed from its official docs with matching PyTorch/CUDA.
