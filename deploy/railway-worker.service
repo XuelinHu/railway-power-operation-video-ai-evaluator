@@ -1,0 +1,44 @@
+[Unit]
+Description=铁道供电作业视频智能评价平台 - 分析 worker
+Documentation=file:///opt/railway-power/README.md
+After=network.target railway-api.service
+
+[Service]
+Type=simple
+User=railway
+Group=railway
+WorkingDirectory=/opt/railway-power/backend
+
+EnvironmentFile=/opt/railway-power/.env
+
+ExecStart=/opt/railway-power/backend/.venv/bin/python -m app.worker
+
+Restart=always
+RestartSec=5
+
+# **concurrency=1 是这个服务的核心设计，不是省事。**
+# SQLite 是单写者，而每个任务要跑 ffmpeg 转码 + 4 次 VLM 调用，
+# 无 GPU 的机器上并行只会让每个任务都变慢，还会把 API 拖到 database is locked。
+# 要提速就把任务分到多台机器上，而不是在这里加并发。
+#
+# CPU 让给 API：转码慢一点没关系（学生看不到），但 API 卡住所有人都用不了。
+Nice=10
+CPUWeight=50
+
+# worker 是内存风险最大的一环：ffmpeg 转码一个 15 分钟的视频可以吃掉几个 GB。
+# 超限被杀掉是**可恢复的**——心跳过期后 reaper 会把任务放回队列重跑。
+MemoryMax=2500M
+MemoryHigh=2000M
+
+PrivateTmp=false
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=false
+ReadWritePaths=/opt/railway-power/data
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=railway-worker
+
+[Install]
+WantedBy=multi-user.target

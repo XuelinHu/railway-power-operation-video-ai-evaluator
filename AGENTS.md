@@ -18,8 +18,9 @@
 - SQLite has no network port; the file is created automatically when the backend starts.
 
 ### Default Ports
-- Backend FastAPI service: `8024`.
-- Frontend Vite dev server: `4022`.
+- Backend FastAPI service: `8090`.
+- Frontend Vite dev server: `4090`.
+- **这两个端口刻意选在 FRP 转发范围（8020-8040 / 4020-4040）之外**，避免开发机服务被 `frpc` 映射到公网。改动端口前请先读 `~/.claude/skills/frp/references/project-ports.md`。
 
 ### Notes For Codex Agents
 - Uploaded videos are stored under `backend/data/uploads`; keep generated runtime data out of Git unless explicitly required.

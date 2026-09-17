@@ -1,11 +1,31 @@
+# --- 运行时数据 -----------------------------------------------------------
+# 库和它的 WAL 影子文件必须一起忽略：只忽略 app.db 的话，
+# -wal/-shm 会被提交进去，而它们是**另一个库的**日志，
+# 恢复时会和主库对不上，产生极难查的数据错乱。
 backend/data/app.db
+backend/data/app.db-wal
+backend/data/app.db-shm
+backend/data/worker.heartbeat
 backend/data/uploads/*
 !backend/data/uploads/.gitkeep
+backend/data/frames/
+backend/data/backups/
+
+# --- 依赖 -----------------------------------------------------------------
+# 不带结尾斜杠，这样对**目录和指向目录的符号链接**都生效。
+# 工作区里的 .venv / node_modules 是从主检出软链过来的，
+# 带斜杠的规则匹配不到符号链接，会漏掉。
+backend/.venv
+frontend/node_modules
+frontend/dist
+
+# --- 日志与进程文件 -------------------------------------------------------
 backend.log
 backend.pid
 frontend.log
 frontend.pid
-frontend/dist/
-frontend/node_modules/
+
+# --- Python ---------------------------------------------------------------
 __pycache__/
 *.pyc
+.pytest_cache/

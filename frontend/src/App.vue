@@ -1,326 +1,120 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { api } from './services/api'
+/**
+ * 根组件：只做三件事——**登录门、强制改密门、按角色分流**。
+ *
+ * 为什么不引 vue-router：对 100 人、三个角色、四个页面的系统，
+ * 路由带来的收益（可分享的 URL、前进后退）几乎为零，而成本是
+ * 多一个依赖、多一层"路由守卫没拦住导致闪现未授权页面"的出错面。
+ * 角色分流用一个 v-if 就够了，而且不会出现"URL 直接访问绕过守卫"。
+ */
+import { onMounted, ref } from 'vue'
+import { api, setUnauthorizedHandler } from './services/api'
+import LoginView from './components/LoginView.vue'
+import ChangePasswordView from './components/ChangePasswordView.vue'
+import StudentView from './components/StudentView.vue'
+import TeacherView from './components/TeacherView.vue'
 
-const loading = ref(false)
-const message = ref('')
-const stats = ref({ total_jobs: 0, completed_jobs: 0, average_score: 0, excellent_count: 0, risk_count: 0 })
-const tasks = ref([])
-const jobs = ref([])
-const steps = ref([])
-const rules = ref([])
-const knowledge = ref([])
-const selectedJobId = ref(null)
-const detail = ref(null)
-const fileInput = ref(null)
+const user = ref(null)
+const checking = ref(true)
+const notice = ref('')
+const demoMode = ref(false)
 
-const taskForm = ref({
-  title: '接触网停电验电接地实训评价',
-  course: '铁道供电安全实训',
-  class_name: '供电 2401 班',
-  teacher: '张老师',
-  description: '围绕防护用品、工作票确认、验电、挂接地线、开关操作和复核状态进行视频智能评价。'
+function notify(text) {
+  notice.value = text
+  // 提示看完就该消失；留太久会让下一条提示显得像是上一条还没处理。
+  window.setTimeout(() => {
+    if (notice.value === text) notice.value = ''
+  }, 8000)
+}
+
+async function logout() {
+  try {
+    await api.logout()
+  } catch {
+    /* 登出失败也要把本地状态清掉，否则会卡在"看起来已登录但不能用" */
+  }
+  user.value = null
+  notice.value = ''
+}
+
+// 任何请求收到 401（会话过期、被管理员停用、被改密踢下线）都回到登录页。
+setUnauthorizedHandler(() => {
+  if (user.value) {
+    user.value = null
+    notify('登录已失效，请重新登录。')
+  }
 })
 
-const uploadForm = ref({
-  task_id: '',
-  student_name: '李明',
-  student_no: '20260001'
-})
-
-const selectedTask = computed(() => tasks.value.find((task) => task.id === Number(uploadForm.value.task_id)))
-const completedJobs = computed(() => jobs.value.filter((job) => job.status === 'completed'))
-
-function formatTime(seconds) {
-  if (seconds === null || seconds === undefined) return '-'
-  const minute = Math.floor(seconds / 60)
-  const second = Math.floor(seconds % 60)
-  return `${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`
-}
-
-async function refreshAll() {
-  const [nextStats, nextTasks, nextJobs, nextSteps, nextRules, nextKnowledge] = await Promise.all([
-    api.stats(),
-    api.listTasks(),
-    api.listJobs(),
-    api.steps(),
-    api.rules(),
-    api.knowledge()
-  ])
-  stats.value = nextStats
-  tasks.value = nextTasks
-  jobs.value = nextJobs
-  steps.value = nextSteps
-  rules.value = nextRules
-  knowledge.value = nextKnowledge
-  if (!uploadForm.value.task_id && nextTasks.length) {
-    uploadForm.value.task_id = String(nextTasks[0].id)
-  }
-  if (!selectedJobId.value && nextJobs.length) {
-    await selectJob(nextJobs[0].id)
-  } else if (selectedJobId.value) {
-    await selectJob(selectedJobId.value)
-  }
-}
-
-async function createTask() {
-  loading.value = true
-  message.value = ''
+async function restore() {
+  checking.value = true
   try {
-    const task = await api.createTask(taskForm.value)
-    uploadForm.value.task_id = String(task.id)
-    message.value = '评价任务已创建'
-    await refreshAll()
-  } catch (error) {
-    message.value = error.message
+    // 直接问后端"我是谁"，而不是把用户信息存 localStorage：
+    // 存本地的话，账号被停用后前端仍会显示已登录，直到下一次请求才报错。
+    user.value = await api.me()
+  } catch {
+    user.value = null
   } finally {
-    loading.value = false
+    checking.value = false
   }
 }
 
-async function uploadVideo() {
-  const file = fileInput.value?.files?.[0]
-  if (!file) {
-    message.value = '请先选择视频文件'
-    return
-  }
-  if (!uploadForm.value.task_id) {
-    message.value = '请先创建或选择评价任务'
-    return
-  }
-  loading.value = true
-  message.value = ''
+async function loadMode() {
+  // 演示横幅的判据来自**后端实际在跑什么**，不是构建时的环境变量——
+  // 后者在部署时会和真实配置走散，那时候横幅要么该显示而没显示
+  // （把演示结果当成真实评分），要么反过来。
   try {
-    const formData = new FormData()
-    formData.append('task_id', uploadForm.value.task_id)
-    formData.append('student_name', uploadForm.value.student_name)
-    formData.append('student_no', uploadForm.value.student_no)
-    formData.append('file', file)
-    const result = await api.uploadSubmission(formData)
-    selectedJobId.value = result.job.id
-    message.value = '视频已上传，分析任务已创建'
-    await new Promise((resolve) => setTimeout(resolve, 600))
-    await refreshAll()
-  } catch (error) {
-    message.value = error.message
-  } finally {
-    loading.value = false
+    const health = await api.health()
+    demoMode.value = health?.checks?.ai_provider === 'demo'
+  } catch {
+    demoMode.value = false // 健康检查失败不该影响登录
   }
 }
 
-async function selectJob(jobId) {
-  selectedJobId.value = jobId
-  detail.value = await api.getDetail(jobId)
-}
-
-async function rerunJob() {
-  if (!selectedJobId.value) return
-  loading.value = true
-  try {
-    await api.rerun(selectedJobId.value)
-    message.value = '已重新分析'
-    await refreshAll()
-  } catch (error) {
-    message.value = error.message
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(async () => {
-  loading.value = true
-  try {
-    await refreshAll()
-  } catch (error) {
-    message.value = `后端连接失败：${error.message}`
-  } finally {
-    loading.value = false
-  }
+onMounted(() => {
+  loadMode()
+  restore()
 })
 </script>
 
 <template>
-  <main class="app-shell">
+  <div v-if="checking" class="boot-screen">正在加载…</div>
+
+  <LoginView v-else-if="!user" @success="user = $event" />
+
+  <ChangePasswordView v-else-if="user.must_change_password" @success="restore" />
+
+  <main v-else class="app-shell">
     <header class="topbar">
       <div>
         <p class="eyebrow">Railway Power Operation AI Evaluator</p>
         <h1>铁道供电作业视频智能评价平台</h1>
       </div>
-      <button class="ghost-button" :disabled="loading" @click="refreshAll">刷新</button>
+      <div class="topbar-right">
+        <span class="whoami">
+          {{ user.display_name || user.username }}
+          <small>{{ user.role === 'student' ? '学生' : user.role === 'admin' ? '管理员' : '教师' }}</small>
+        </span>
+        <button class="ghost-button" @click="logout">退出登录</button>
+      </div>
     </header>
 
-    <section class="metrics">
-      <div class="metric">
-        <span>分析任务</span>
-        <strong>{{ stats.total_jobs }}</strong>
-      </div>
-      <div class="metric">
-        <span>已完成</span>
-        <strong>{{ stats.completed_jobs }}</strong>
-      </div>
-      <div class="metric">
-        <span>平均分</span>
-        <strong>{{ stats.average_score }}</strong>
-      </div>
-      <div class="metric">
-        <span>风险作业</span>
-        <strong>{{ stats.risk_count }}</strong>
-      </div>
-    </section>
+    <!-- 演示数据横幅。演示模式的产出**不是对视频内容的真实分析**，
+         不标出来的话，看的人会把它当成系统真的判断对了。 -->
+    <p v-if="demoMode" class="demo-banner">
+      当前是演示模式：分析结果由固定样本生成，**不是**对视频内容的真实判断，不可用于评分。
+    </p>
 
-    <p v-if="message" class="message">{{ message }}</p>
+    <p v-if="notice" class="message">{{ notice }}</p>
 
-    <section class="workspace">
-      <aside class="panel controls">
-        <h2>基本操作</h2>
-        <div class="form-grid">
-          <label>
-            <span>任务名称</span>
-            <input v-model="taskForm.title" />
-          </label>
-          <label>
-            <span>课程</span>
-            <input v-model="taskForm.course" />
-          </label>
-          <label>
-            <span>班级</span>
-            <input v-model="taskForm.class_name" />
-          </label>
-          <label>
-            <span>教师</span>
-            <input v-model="taskForm.teacher" />
-          </label>
-          <label class="full">
-            <span>任务说明</span>
-            <textarea v-model="taskForm.description" rows="3"></textarea>
-          </label>
-        </div>
-        <button class="primary-button" :disabled="loading" @click="createTask">创建评价任务</button>
-
-        <div class="divider"></div>
-
-        <label>
-          <span>选择任务</span>
-          <select v-model="uploadForm.task_id">
-            <option v-for="task in tasks" :key="task.id" :value="String(task.id)">
-              {{ task.title }}
-            </option>
-          </select>
-        </label>
-        <div class="form-grid compact">
-          <label>
-            <span>学生姓名</span>
-            <input v-model="uploadForm.student_name" />
-          </label>
-          <label>
-            <span>学号</span>
-            <input v-model="uploadForm.student_no" />
-          </label>
-        </div>
-        <label>
-          <span>上传视频</span>
-          <input ref="fileInput" type="file" accept="video/*,.txt,.mp4,.mov,.avi" />
-        </label>
-        <button class="primary-button" :disabled="loading" @click="uploadVideo">上传并分析</button>
-        <p v-if="selectedTask" class="hint">当前任务：{{ selectedTask.class_name }} / {{ selectedTask.teacher }}</p>
-      </aside>
-
-      <section class="panel result-panel">
-        <div class="section-header">
-          <h2>评分结果</h2>
-          <button class="ghost-button" :disabled="!selectedJobId || loading" @click="rerunJob">重新分析</button>
-        </div>
-
-        <div class="job-list">
-          <button
-            v-for="job in jobs"
-            :key="job.id"
-            class="job-item"
-            :class="{ active: job.id === selectedJobId }"
-            @click="selectJob(job.id)"
-          >
-            <span>#{{ job.id }} {{ job.status }}</span>
-            <strong>{{ job.score }} 分</strong>
-          </button>
-        </div>
-
-        <div v-if="detail" class="detail-grid">
-          <div class="video-pane">
-            <video
-              v-if="detail.submission"
-              controls
-              :src="api.videoUrl(detail.submission.id)"
-            ></video>
-            <div class="report-card">
-              <span class="score">{{ detail.job.score }}</span>
-              <div>
-                <h3>{{ detail.report?.conclusion || detail.job.summary || '等待分析完成' }}</h3>
-                <p>{{ detail.report?.strengths }}</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="evidence-pane">
-            <h3>标准流程识别</h3>
-            <ol class="timeline">
-              <li v-for="step in detail.steps" :key="step.id">
-                <time>{{ formatTime(step.start_sec) }}</time>
-                <div>
-                  <strong>{{ step.step_name }}</strong>
-                  <p>{{ step.evidence }}</p>
-                </div>
-              </li>
-            </ol>
-
-            <h3>扣分项</h3>
-            <div v-if="detail.violations.length" class="violations">
-              <article v-for="item in detail.violations" :key="item.id" class="violation">
-                <div>
-                  <strong>{{ item.title }}</strong>
-                  <span>{{ item.severity }} / 扣 {{ item.deduction }} 分</span>
-                </div>
-                <p>{{ item.reason }}</p>
-                <small>{{ item.suggestion }}</small>
-              </article>
-            </div>
-            <p v-else class="empty">暂无硬性规则扣分项</p>
-          </div>
-        </div>
-
-        <div v-else class="empty-state">
-          创建任务并上传视频后，这里会显示 AI 证据、扣分项和评价报告。
-        </div>
-      </section>
-    </section>
-
-    <section class="reference-grid">
-      <div class="panel">
-        <h2>评分规则</h2>
-        <ul class="plain-list">
-          <li v-for="rule in rules" :key="rule.id">
-            <strong>{{ rule.title }}</strong>
-            <span>扣 {{ rule.deduction }} 分</span>
-          </li>
-        </ul>
-      </div>
-      <div class="panel">
-        <h2>标准步骤</h2>
-        <ul class="plain-list">
-          <li v-for="step in steps" :key="step.id">
-            <strong>{{ step.order_index }}. {{ step.name }}</strong>
-            <span>{{ step.required ? '必需' : '可选' }}</span>
-          </li>
-        </ul>
-      </div>
-      <div class="panel">
-        <h2>知识库</h2>
-        <ul class="plain-list docs">
-          <li v-for="doc in knowledge" :key="doc.id">
-            <strong>{{ doc.title }}</strong>
-            <span>{{ doc.category }}</span>
-          </li>
-        </ul>
-      </div>
-    </section>
+    <StudentView
+      v-if="user.role === 'student'"
+      :user="user"
+      @notify="notify"
+    />
+    <TeacherView
+      v-else
+      :user="user"
+      @notify="notify"
+    />
   </main>
 </template>
