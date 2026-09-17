@@ -18,8 +18,8 @@
 - SQLite has no network port; the file is created automatically when the backend starts.
 
 ### Default Ports
-- Backend FastAPI service: `8000`.
-- Frontend Vite dev server: `5173`.
+- Backend FastAPI service: `8024`.
+- Frontend Vite dev server: `4022`.
 
 ### Notes For Codex Agents
 - Uploaded videos are stored under `backend/data/uploads`; keep generated runtime data out of Git unless explicitly required.

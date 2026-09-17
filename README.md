@@ -39,20 +39,20 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8024
 ```
 
-接口文档：http://localhost:8000/docs
+接口文档：http://localhost:8024/docs
 
 ### 2. 前端
 
 ```bash
 cd frontend
 npm install
-npm run dev -- --host 0.0.0.0 --port 5173
+npm run dev -- --host 0.0.0.0 --port 4022
 ```
 
-前端地址：http://localhost:5173
+前端地址：http://localhost:4022
 
 ## 项目结构
 
@@ -159,3 +159,26 @@ export OPENAI_MODEL=gpt-4.1-mini
 - 文件名包含 `skip-ground` 或 `未接地` 时，会判定缺失挂接地线步骤
 
 这方便在没有真实模型和样本视频时演示完整业务闭环。
+
+<!-- codex-runtime-notes:start -->
+
+## Runtime Ports And Database Configuration
+
+### Database
+- Primary database: SQLite.
+- Default database file: `backend/data/app.db`.
+- SQLite has no network port; the file is created automatically when the backend starts.
+
+### Default Ports
+- Backend FastAPI service: `8024`.
+- Frontend Vite dev server: `4022`.
+
+### Notes
+- Uploaded videos are stored under `backend/data/uploads`; keep generated runtime data out of Git unless explicitly required.
+
+### Source Files Checked
+- `backend/app/database.py`
+- `frontend/vite.config.js`
+- `README.md`
+
+<!-- codex-runtime-notes:end -->
