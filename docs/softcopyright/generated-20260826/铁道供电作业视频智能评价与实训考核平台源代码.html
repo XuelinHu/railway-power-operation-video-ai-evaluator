@@ -1,0 +1,3443 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>铁道供电作业视频智能评价与实训考核平台 V1.0 源代码</title><style>@page{size:A4;margin:15mm 14mm 12mm}*{box-sizing:border-box}body{font-family:"Noto Sans CJK SC","Microsoft YaHei",Arial,sans-serif;color:#17272b;background:#fff;font-size:9.4pt;line-height:1.25;margin:0;padding:0}.page-break{break-before:page;break-after:avoid;height:0}h1{font-size:20pt;text-align:center;margin:0 0 8mm;color:#17343a}h2{font-size:14.5pt;margin:7mm 0 3mm;color:#1d5b66;border-bottom:1pt solid #91aeb2;padding-bottom:1.5mm;break-after:avoid}h3{font-size:11.5pt;margin:4mm 0 1.5mm;color:#285760;break-after:avoid}p{margin:2mm 0;text-align:justify}blockquote{border-left:3pt solid #91aeb2;margin:3mm 0;padding:2mm 4mm;color:#49656a}table{width:100%;border-collapse:collapse;border-top:1pt solid #17343a;border-bottom:1pt solid #17343a;margin:3mm 0 4mm;break-inside:auto}thead{display:table-header-group}th{border-bottom:0.7pt solid #17343a;font-weight:700}th,td{padding:1.5mm 2mm;vertical-align:top;text-align:left}tr{break-inside:avoid}pre{font-family:"Noto Sans Mono CJK SC",Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:#fff;border:0.5pt solid #9aaeb1;padding:2.5mm;margin:2mm 0;font-size:8.7pt;line-height:1.24}code{font-family:"Noto Sans Mono CJK SC",Consolas,monospace}img{display:block;max-width:100%;max-height:118mm;margin:3mm auto;object-fit:contain}ul,ol{padding-left:7mm}.toc{list-style:none;padding-left:0}.toc li{display:flex;gap:3mm;border-bottom:0.3pt dotted #a9b9ba;padding:1.2mm 0}.toc a{flex:1;color:#17343a}.toc-page{min-width:18mm;text-align:right;color:#49656a}.cover{min-height:250mm;display:flex;flex-direction:column;justify-content:center;align-items:center}.cover-meta{width:150mm;border-top:1pt solid #1d5b66;border-bottom:1pt solid #1d5b66;padding:5mm;margin-top:8mm}.cover-meta p{margin:1.5mm 0}.body{color:#000}h1,h2,h3{color:#000;border-color:#000}table{border-color:#000}th{border-color:#000}blockquote{border-color:#000;color:#000}.pdf-header{color:#000;font-size:7pt;white-space:nowrap;overflow:hidden}pre{border-color:#000}body:before{border-color:#000}.cover-meta{border-color:#000}a{color:#000}</style></head><body><div class="cover"><h1>铁道供电作业视频智能评价与实训考核平台源代码</h1><div class="cover-meta"><p>软件名称：铁道供电作业视频智能评价与实训考核平台 V1.0 </p><p>版本号：V1.0</p><p>文档类型：源代码</p></div></div>
+<h2 id="">目录</h2>
+<p>1. backend/app/database.py</p>
+<p>2. backend/app/main.py</p>
+<p>3. backend/app/models.py</p>
+<p>4. backend/app/routers/__init__.py</p>
+<p>5. backend/app/routers/analysis.py</p>
+<p>6. backend/app/routers/catalog.py</p>
+<p>7. backend/app/routers/submissions.py</p>
+<p>8. backend/app/routers/tasks.py</p>
+<p>9. backend/app/seed.py</p>
+<p>10. backend/app/services/ai/__init__.py</p>
+<p>11. backend/app/services/ai/action_recognizer.py</p>
+<p>12. backend/app/services/ai/config.py</p>
+<p>13. backend/app/services/ai/contracts.py</p>
+<p>14. backend/app/services/ai/frame_extractor.py</p>
+<p>15. backend/app/services/ai/mock_analyzer.py</p>
+<p>16. backend/app/services/ai/multimodal.py</p>
+<p>17. backend/app/services/ai/pipeline.py</p>
+<p>18. backend/app/services/ai/pose_estimator.py</p>
+<p>19. backend/app/services/ai/steps.py</p>
+<p>20. backend/app/services/ai/yolo_detector.py</p>
+<p>21. backend/app/services/analyzer.py</p>
+<p>22. backend/app/services/report.py</p>
+<p>23. backend/app/services/rule_engine.py</p>
+<p>24. backend/requirements.txt</p>
+<p>25. backend/smoke_test.py</p>
+<p>26. frontend/index.html</p>
+<p>27. frontend/package-lock.json</p>
+<p>28. frontend/package.json</p>
+<p>29. frontend/src/App.vue</p>
+<p>30. frontend/src/main.js</p>
+<p>31. frontend/src/services/api.js</p>
+<p>32. frontend/src/styles.css</p>
+<p>33. frontend/vite.config.js</p>
+<div class="page-break"></div>
+<h3>backend/app/database.py</h3>
+<pre>from pathlib import Path
+
+from sqlmodel import SQLModel, Session, create_engine
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / &quot;data&quot;
+UPLOAD_DIR = DATA_DIR / &quot;uploads&quot;
+DATABASE_URL = f&quot;sqlite:///{DATA_DIR / 'app.db'}&quot;
+
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+engine = create_engine(DATABASE_URL, connect_args={&quot;check_same_thread&quot;: False})
+
+
+def init_db() -&gt; None:
+    SQLModel.metadata.create_all(engine)
+
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+</pre>
+<h3>backend/app/main.py</h3>
+<pre>from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sqlmodel import Session
+
+from .database import engine, init_db
+from .routers import analysis, catalog, submissions, tasks
+from .seed import seed_defaults
+
+app = FastAPI(title=&quot;铁道供电作业视频智能评价平台&quot;, version=&quot;1.0.0&quot;)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[&quot;*&quot;],
+    allow_credentials=True,
+    allow_methods=[&quot;*&quot;],
+    allow_headers=[&quot;*&quot;],
+)
+
+
+@app.on_event(&quot;startup&quot;)
+def on_startup() -&gt; None:
+    init_db()
+    with Session(engine) as session:
+        seed_defaults(session)
+
+
+@app.get(&quot;/api/health&quot;)
+def health():
+    return {&quot;status&quot;: &quot;ok&quot;}
+
+
+app.include_router(catalog.router)
+app.include_router(tasks.router)
+app.include_router(submissions.router)
+app.include_router(analysis.router)
+</pre>
+<h3>backend/app/models.py</h3>
+<pre>from datetime import datetime
+from enum import Enum
+from typing import Optional
+
+from sqlmodel import Field, SQLModel
+
+
+class AnalysisStatus(str, Enum):
+    pending = &quot;pending&quot;
+    running = &quot;running&quot;
+    completed = &quot;completed&quot;
+    failed = &quot;failed&quot;
+
+
+class TrainingTask(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    title: str
+    course: str
+    class_name: str
+    teacher: str
+    description: str = &quot;&quot;
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class StandardStep(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    code: str = Field(index=True, unique=True)
+    name: str
+    order_index: int = Field(index=True)
+    description: str = &quot;&quot;
+    required: bool = True
+
+
+class ScoringRule(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    code: str = Field(index=True, unique=True)
+    title: str
+    rule_type: str
+    target_code: str = &quot;&quot;
+    deduction: float
+    severity: str = &quot;medium&quot;
+    description: str = &quot;&quot;
+
+
+class VideoSubmission(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    task_id: int = Field(foreign_key=&quot;trainingtask.id&quot;, index=True)
+    student_name: str
+    student_no: str = &quot;&quot;
+    original_filename: str
+    stored_filename: str
+    content_type: str = &quot;&quot;
+    size_bytes: int = 0
+    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AnalysisJob(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    submission_id: int = Field(foreign_key=&quot;videosubmission.id&quot;, index=True)
+    status: AnalysisStatus = Field(default=AnalysisStatus.pending, index=True)
+    score: float = 0
+    summary: str = &quot;&quot;
+    error_message: str = &quot;&quot;
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+
+class DetectionResult(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    job_id: int = Field(foreign_key=&quot;analysisjob.id&quot;, index=True)
+    label: str
+    confidence: float
+    timestamp_sec: float
+    bbox: str = &quot;&quot;
+
+
+class ActionResult(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    job_id: int = Field(foreign_key=&quot;analysisjob.id&quot;, index=True)
+    action: str
+    confidence: float
+    start_sec: float
+    end_sec: float
+
+
+class StepEvent(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    job_id: int = Field(foreign_key=&quot;analysisjob.id&quot;, index=True)
+    step_code: str = Field(index=True)
+    step_name: str
+    start_sec: float
+    end_sec: float
+    confidence: float
+    evidence: str = &quot;&quot;
+
+
+class Violation(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    job_id: int = Field(foreign_key=&quot;analysisjob.id&quot;, index=True)
+    rule_code: str
+    title: str
+    deduction: float
+    severity: str
+    timestamp_sec: Optional[float] = None
+    reason: str
+    suggestion: str
+
+
+class EvaluationReport(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    job_id: int = Field(foreign_key=&quot;analysisjob.id&quot;, index=True, unique=True)
+    score: float
+    conclusion: str
+    strengths: str
+    problems: str
+    suggestions: str
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class KnowledgeDocument(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    title: str
+    category: str = &quot;规程&quot;
+    content: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+</pre>
+<h3>backend/app/routers/__init__.py</h3>
+<pre>
+</pre>
+<h3>backend/app/routers/analysis.py</h3>
+<pre>from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlmodel import Session, select
+
+from ..database import UPLOAD_DIR, engine, get_session
+from ..models import (
+    ActionResult,
+    AnalysisJob,
+    AnalysisStatus,
+    DetectionResult,
+    EvaluationReport,
+    StepEvent,
+    VideoSubmission,
+    Violation,
+)
+from ..services.analyzer import Analyzer
+from ..services.report import generate_report
+from ..services.rule_engine import evaluate_rules
+
+router = APIRouter(prefix=&quot;/api/analysis&quot;, tags=[&quot;analysis&quot;])
+
+
+def run_analysis(job_id: int) -&gt; None:
+    with Session(engine) as session:
+        job = session.get(AnalysisJob, job_id)
+        if not job:
+            return
+        job.status = AnalysisStatus.running
+        job.started_at = datetime.utcnow()
+        session.add(job)
+        session.commit()
+
+        try:
+            submission = session.get(VideoSubmission, job.submission_id)
+            if not submission:
+                raise RuntimeError(&quot;Submission not found&quot;)
+            facts = Analyzer().analyze(UPLOAD_DIR / submission.stored_filename, submission.original_filename)
+
+            for fact in facts.detections:
+                session.add(DetectionResult(job_id=job_id, **fact.__dict__))
+            for fact in facts.actions:
+                session.add(ActionResult(job_id=job_id, **fact.__dict__))
+            for fact in facts.steps:
+                session.add(StepEvent(job_id=job_id, **fact.__dict__))
+            session.commit()
+
+            score, _ = evaluate_rules(session, job_id)
+            report = generate_report(session, job_id, score)
+            session.add(report)
+
+            job.score = score
+            notes = f&quot; 模型备注：{'；'.join(facts.notes)}&quot; if facts.notes else &quot;&quot;
+            job.summary = f&quot;{report.conclusion}{notes}&quot;
+            job.status = AnalysisStatus.completed
+            job.completed_at = datetime.utcnow()
+            session.add(job)
+            session.commit()
+        except Exception as exc:
+            job.status = AnalysisStatus.failed
+            job.error_message = str(exc)
+            job.completed_at = datetime.utcnow()
+            session.add(job)
+            session.commit()
+
+
+@router.get(&quot;/jobs&quot;)
+def list_jobs(session: Session = Depends(get_session)):
+    return session.exec(select(AnalysisJob).order_by(AnalysisJob.created_at.desc())).all()
+
+
+@router.get(&quot;/jobs/{job_id}&quot;)
+def get_job(job_id: int, session: Session = Depends(get_session)):
+    job = session.get(AnalysisJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=&quot;Job not found&quot;)
+    return job
+
+
+@router.post(&quot;/jobs/{job_id}/rerun&quot;)
+def rerun_job(job_id: int, session: Session = Depends(get_session)):
+    job = session.get(AnalysisJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=&quot;Job not found&quot;)
+
+    for model in [DetectionResult, ActionResult, StepEvent, Violation, EvaluationReport]:
+        rows = session.exec(select(model).where(model.job_id == job_id)).all()
+        for row in rows:
+            session.delete(row)
+    job.status = AnalysisStatus.pending
+    job.score = 0
+    job.summary = &quot;&quot;
+    job.error_message = &quot;&quot;
+    session.add(job)
+    session.commit()
+    run_analysis(job_id)
+    session.refresh(job)
+    return job
+
+
+@router.get(&quot;/jobs/{job_id}/detail&quot;)
+def get_analysis_detail(job_id: int, session: Session = Depends(get_session)):
+    job = session.get(AnalysisJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=&quot;Job not found&quot;)
+    submission = session.get(VideoSubmission, job.submission_id)
+    return {
+        &quot;job&quot;: job,
+        &quot;submission&quot;: submission,
+        &quot;detections&quot;: session.exec(select(DetectionResult).where(DetectionResult.job_id == job_id)).all(),
+        &quot;actions&quot;: session.exec(select(ActionResult).where(ActionResult.job_id == job_id).order_by(ActionResult.start_sec)).all(),
+        &quot;steps&quot;: session.exec(select(StepEvent).where(StepEvent.job_id == job_id).order_by(StepEvent.start_sec)).all(),
+        &quot;violations&quot;: session.exec(select(Violation).where(Violation.job_id == job_id).order_by(Violation.deduction.desc())).all(),
+        &quot;report&quot;: session.exec(select(EvaluationReport).where(EvaluationReport.job_id == job_id)).first(),
+    }
+
+
+@router.get(&quot;/stats/overview&quot;)
+def overview(session: Session = Depends(get_session)):
+    jobs = session.exec(select(AnalysisJob)).all()
+    completed = [job for job in jobs if job.status == AnalysisStatus.completed]
+    average = round(sum(job.score for job in completed) / len(completed), 1) if completed else 0
+    return {
+        &quot;total_jobs&quot;: len(jobs),
+        &quot;completed_jobs&quot;: len(completed),
+        &quot;average_score&quot;: average,
+        &quot;excellent_count&quot;: len([job for job in completed if job.score &gt;= 90]),
+        &quot;risk_count&quot;: len([job for job in completed if job.score &lt; 70]),
+    }
+</pre>
+<h3>backend/app/routers/catalog.py</h3>
+<pre>from fastapi import APIRouter, Depends
+from sqlmodel import Session, select
+
+from ..database import get_session
+from ..models import KnowledgeDocument, ScoringRule, StandardStep
+
+router = APIRouter(prefix=&quot;/api/catalog&quot;, tags=[&quot;catalog&quot;])
+
+
+@router.get(&quot;/steps&quot;)
+def list_steps(session: Session = Depends(get_session)):
+    return session.exec(select(StandardStep).order_by(StandardStep.order_index)).all()
+
+
+@router.get(&quot;/rules&quot;)
+def list_rules(session: Session = Depends(get_session)):
+    return session.exec(select(ScoringRule).order_by(ScoringRule.id)).all()
+
+
+@router.get(&quot;/knowledge&quot;)
+def list_knowledge(session: Session = Depends(get_session)):
+    return session.exec(select(KnowledgeDocument).order_by(KnowledgeDocument.id)).all()
+</pre>
+<h3>backend/app/routers/submissions.py</h3>
+<pre>from pathlib import Path
+from uuid import uuid4
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from sqlmodel import Session, select
+
+from ..database import UPLOAD_DIR, get_session
+from ..models import AnalysisJob, VideoSubmission
+from .analysis import run_analysis
+
+router = APIRouter(prefix=&quot;/api/submissions&quot;, tags=[&quot;submissions&quot;])
+
+
+@router.get(&quot;&quot;)
+def list_submissions(task_id: int | None = None, session: Session = Depends(get_session)):
+    query = select(VideoSubmission).order_by(VideoSubmission.uploaded_at.desc())
+    if task_id:
+        query = select(VideoSubmission).where(VideoSubmission.task_id == task_id).order_by(VideoSubmission.uploaded_at.desc())
+    return session.exec(query).all()
+
+
+@router.post(&quot;&quot;)
+async def upload_submission(
+    background_tasks: BackgroundTasks,
+    task_id: int = Form(...),
+    student_name: str = Form(...),
+    student_no: str = Form(&quot;&quot;),
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+):
+    suffix = Path(file.filename or &quot;video.mp4&quot;).suffix or &quot;.mp4&quot;
+    stored_filename = f&quot;{uuid4().hex}{suffix}&quot;
+    target = UPLOAD_DIR / stored_filename
+    content = await file.read()
+    target.write_bytes(content)
+
+    submission = VideoSubmission(
+        task_id=task_id,
+        student_name=student_name,
+        student_no=student_no,
+        original_filename=file.filename or stored_filename,
+        stored_filename=stored_filename,
+        content_type=file.content_type or &quot;&quot;,
+        size_bytes=len(content),
+    )
+    session.add(submission)
+    session.commit()
+    session.refresh(submission)
+
+    job = AnalysisJob(submission_id=submission.id)
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    background_tasks.add_task(run_analysis, job.id)
+
+    return {&quot;submission&quot;: submission, &quot;job&quot;: job}
+
+
+@router.get(&quot;/{submission_id}/video&quot;)
+def get_video(submission_id: int, session: Session = Depends(get_session)):
+    submission = session.get(VideoSubmission, submission_id)
+    if not submission:
+        raise HTTPException(status_code=404, detail=&quot;Submission not found&quot;)
+    path = UPLOAD_DIR / submission.stored_filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=&quot;Video file not found&quot;)
+    return FileResponse(path, media_type=submission.content_type or &quot;video/mp4&quot;, filename=submission.original_filename)
+</pre>
+<h3>backend/app/routers/tasks.py</h3>
+<pre>from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlmodel import Session, select
+
+from ..database import get_session
+from ..models import TrainingTask
+
+router = APIRouter(prefix=&quot;/api/tasks&quot;, tags=[&quot;tasks&quot;])
+
+
+class TaskCreate(BaseModel):
+    title: str
+    course: str
+    class_name: str
+    teacher: str
+    description: str = &quot;&quot;
+
+
+@router.get(&quot;&quot;)
+def list_tasks(session: Session = Depends(get_session)):
+    return session.exec(select(TrainingTask).order_by(TrainingTask.created_at.desc())).all()
+
+
+@router.post(&quot;&quot;)
+def create_task(payload: TaskCreate, session: Session = Depends(get_session)):
+    task = TrainingTask(**payload.model_dump())
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    return task
+
+
+@router.get(&quot;/{task_id}&quot;)
+def get_task(task_id: int, session: Session = Depends(get_session)):
+    task = session.get(TrainingTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=&quot;Task not found&quot;)
+    return task
+</pre>
+<h3>backend/app/seed.py</h3>
+<pre>from sqlmodel import Session, select
+
+from .models import KnowledgeDocument, ScoringRule, StandardStep
+
+
+DEFAULT_STEPS = [
+    (&quot;ppe&quot;, &quot;穿戴防护用品&quot;, &quot;佩戴安全帽、绝缘手套、绝缘靴等个人防护用品。&quot;),
+    (&quot;ticket&quot;, &quot;确认工作票/操作票&quot;, &quot;核对作业任务、人员、范围和安全措施。&quot;),
+    (&quot;tool_check&quot;, &quot;检查工器具&quot;, &quot;检查验电器、接地线、操作杆等工器具状态。&quot;),
+    (&quot;power_off&quot;, &quot;停电确认&quot;, &quot;确认设备处于停电状态并完成安全确认。&quot;),
+    (&quot;voltage_test&quot;, &quot;验电&quot;, &quot;使用合格验电器对目标设备进行验电。&quot;),
+    (&quot;ground_wire&quot;, &quot;挂接地线&quot;, &quot;验电后按规定装设接地线。&quot;),
+    (&quot;switch_operation&quot;, &quot;操作开关/隔离开关&quot;, &quot;按操作票顺序完成开关、刀闸或隔离开关操作。&quot;),
+    (&quot;review&quot;, &quot;复核状态&quot;, &quot;复核设备状态、接地线状态和现场安全状态。&quot;),
+    (&quot;cleanup&quot;, &quot;清理现场&quot;, &quot;清点工具、撤离人员、恢复现场秩序。&quot;),
+]
+
+DEFAULT_RULES = [
+    (&quot;missing_ppe&quot;, &quot;未完整穿戴防护用品&quot;, &quot;detection_required&quot;, &quot;ppe&quot;, 15, &quot;high&quot;, &quot;进入作业区域前必须完成个人防护用品穿戴。&quot;),
+    (&quot;missing_ticket&quot;, &quot;未确认工作票/操作票&quot;, &quot;step_required&quot;, &quot;ticket&quot;, 10, &quot;medium&quot;, &quot;操作前应核对工作票或操作票。&quot;),
+    (&quot;missing_voltage_test&quot;, &quot;缺失验电步骤&quot;, &quot;step_required&quot;, &quot;voltage_test&quot;, 20, &quot;critical&quot;, &quot;挂接地线和设备操作前必须验电。&quot;),
+    (&quot;missing_ground_wire&quot;, &quot;缺失挂接地线步骤&quot;, &quot;step_required&quot;, &quot;ground_wire&quot;, 20, &quot;critical&quot;, &quot;验电后应按规定挂接地线。&quot;),
+    (&quot;wrong_sequence_ground_before_test&quot;, &quot;挂接地线早于验电&quot;, &quot;sequence&quot;, &quot;voltage_test&gt;ground_wire&quot;, 25, &quot;critical&quot;, &quot;挂接地线必须发生在验电之后。&quot;),
+    (&quot;missing_review&quot;, &quot;未复核设备状态&quot;, &quot;step_required&quot;, &quot;review&quot;, 8, &quot;medium&quot;, &quot;操作完成后应复核设备和现场状态。&quot;),
+]
+
+DEFAULT_DOCS = [
+    (
+        &quot;铁道供电作业评分总则&quot;,
+        &quot;评分细则&quot;,
+        &quot;评价应以视频识别事实为基础，规则评分为硬性依据，教师复核为最终确认。安全防护、验电、接地线、操作顺序属于重点扣分项。&quot;,
+    ),
+    (
+        &quot;停电验电接地操作要求&quot;,
+        &quot;作业规程&quot;,
+        &quot;作业人员应先确认停电，再完成验电。确认无电后方可装设接地线，严禁未验电或验电前挂接地线。&quot;,
+    ),
+    (
+        &quot;个人防护用品要求&quot;,
+        &quot;安全规范&quot;,
+        &quot;进入铁道供电实训操作区域前，应按要求佩戴安全帽、绝缘手套、绝缘靴等防护用品。&quot;,
+    ),
+]
+
+
+def seed_defaults(session: Session) -&gt; None:
+    if not session.exec(select(StandardStep)).first():
+        for index, (code, name, description) in enumerate(DEFAULT_STEPS, start=1):
+            session.add(StandardStep(code=code, name=name, order_index=index, description=description))
+
+    if not session.exec(select(ScoringRule)).first():
+        for code, title, rule_type, target_code, deduction, severity, description in DEFAULT_RULES:
+            session.add(
+                ScoringRule(
+                    code=code,
+                    title=title,
+                    rule_type=rule_type,
+                    target_code=target_code,
+                    deduction=deduction,
+                    severity=severity,
+                    description=description,
+                )
+            )
+
+    if not session.exec(select(KnowledgeDocument)).first():
+        for title, category, content in DEFAULT_DOCS:
+            session.add(KnowledgeDocument(title=title, category=category, content=content))
+
+    session.commit()
+</pre>
+<h3>backend/app/services/ai/__init__.py</h3>
+<pre>from .pipeline import RailwayPowerVideoAnalyzer
+
+__all__ = [&quot;RailwayPowerVideoAnalyzer&quot;]
+</pre>
+<h3>backend/app/services/ai/action_recognizer.py</h3>
+<pre>from pathlib import Path
+from typing import Any
+
+from .config import AISettings
+from .contracts import ActionFact
+
+
+class MMActionRecognizer:
+    def __init__(self, settings: AISettings):
+        self.settings = settings
+        self.recognizer: Any | None = None
+        self.inference_recognizer: Any | None = None
+        self.error: str | None = None
+        if not settings.mmaction_enabled:
+            self.error = &quot;MMAction2 未启用或未配置 MMACTION_CONFIG/MMACTION_CHECKPOINT&quot;
+            return
+        try:
+            from mmaction.apis import inference_recognizer, init_recognizer
+
+            self.recognizer = init_recognizer(settings.mmaction_config, settings.mmaction_checkpoint, device=&quot;cuda:0&quot;)
+            self.inference_recognizer = inference_recognizer
+        except Exception as exc:
+            self.error = f&quot;MMAction2 初始化失败：{exc}&quot;
+
+    def recognize(self, video_path: Path) -&gt; tuple[list[ActionFact], list[str]]:
+        if not self.recognizer or not self.inference_recognizer:
+            return [], [self.error or &quot;MMAction2 recognizer unavailable&quot;]
+
+        try:
+            result = self.inference_recognizer(self.recognizer, str(video_path))
+        except Exception as exc:
+            return [], [f&quot;MMAction2 推理失败：{exc}&quot;]
+
+        predictions = self._normalize_result(result)
+        actions = [
+            ActionFact(action=label, confidence=score, start_sec=index * 8.0, end_sec=index * 8.0 + 6.0)
+            for index, (label, score) in enumerate(predictions[:5])
+        ]
+        return actions, []
+
+    @staticmethod
+    def _normalize_result(result: Any) -&gt; list[tuple[str, float]]:
+        pred_scores = getattr(result, &quot;pred_score&quot;, None)
+        if pred_scores is None:
+            return []
+        values = pred_scores.tolist()
+        ranked = sorted(enumerate(values), key=lambda item: item[1], reverse=True)
+        return [(f&quot;action_{index}&quot;, float(score)) for index, score in ranked]
+</pre>
+<h3>backend/app/services/ai/config.py</h3>
+<pre>from dataclasses import dataclass
+import os
+from pathlib import Path
+
+
+def _bool_env(name: str, default: bool = False) -&gt; bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {&quot;1&quot;, &quot;true&quot;, &quot;yes&quot;, &quot;on&quot;}
+
+
+@dataclass(frozen=True)
+class AISettings:
+    provider: str = os.getenv(&quot;AI_ANALYZER_PROVIDER&quot;, &quot;mock&quot;)
+    frame_sample_fps: float = float(os.getenv(&quot;AI_FRAME_SAMPLE_FPS&quot;, &quot;0.2&quot;))
+    max_frames: int = int(os.getenv(&quot;AI_MAX_FRAMES&quot;, &quot;12&quot;))
+    yolo_model_path: str = os.getenv(&quot;YOLO_MODEL_PATH&quot;, &quot;&quot;)
+    yolo_confidence: float = float(os.getenv(&quot;YOLO_CONFIDENCE&quot;, &quot;0.35&quot;))
+    mediapipe_enabled: bool = _bool_env(&quot;MEDIAPIPE_ENABLED&quot;, False)
+    mmaction_config: str = os.getenv(&quot;MMACTION_CONFIG&quot;, &quot;&quot;)
+    mmaction_checkpoint: str = os.getenv(&quot;MMACTION_CHECKPOINT&quot;, &quot;&quot;)
+    multimodal_provider: str = os.getenv(&quot;MULTIMODAL_PROVIDER&quot;, &quot;none&quot;)
+    openai_model: str = os.getenv(&quot;OPENAI_MODEL&quot;, &quot;gpt-4.1-mini&quot;)
+    openai_api_key: str = os.getenv(&quot;OPENAI_API_KEY&quot;, &quot;&quot;)
+
+    @property
+    def yolo_enabled(self) -&gt; bool:
+        return self.provider in {&quot;yolo&quot;, &quot;hybrid&quot;, &quot;full&quot;} and bool(self.yolo_model_path)
+
+    @property
+    def mmaction_enabled(self) -&gt; bool:
+        return self.provider in {&quot;mmaction&quot;, &quot;hybrid&quot;, &quot;full&quot;} and bool(self.mmaction_config and self.mmaction_checkpoint)
+
+
+def model_path(value: str) -&gt; Path | None:
+    return Path(value).expanduser().resolve() if value else None
+</pre>
+<h3>backend/app/services/ai/contracts.py</h3>
+<pre>from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass
+class VideoFrame:
+    path: Path
+    timestamp_sec: float
+
+
+@dataclass
+class DetectionFact:
+    label: str
+    confidence: float
+    timestamp_sec: float
+    bbox: str = &quot;&quot;
+
+
+@dataclass
+class PoseFact:
+    timestamp_sec: float
+    confidence: float
+    landmarks_json: str
+
+
+@dataclass
+class ActionFact:
+    action: str
+    confidence: float
+    start_sec: float
+    end_sec: float
+
+
+@dataclass
+class StepFact:
+    step_code: str
+    step_name: str
+    start_sec: float
+    end_sec: float
+    confidence: float
+    evidence: str
+
+
+@dataclass
+class AnalysisFacts:
+    detections: list[DetectionFact]
+    actions: list[ActionFact]
+    steps: list[StepFact]
+    notes: list[str]
+</pre>
+<h3>backend/app/services/ai/frame_extractor.py</h3>
+<pre>from pathlib import Path
+import shutil
+import subprocess
+from tempfile import TemporaryDirectory
+
+from .contracts import VideoFrame
+
+
+class FrameExtractor:
+    def __init__(self, sample_fps: float, max_frames: int):
+        self.sample_fps = sample_fps
+        self.max_frames = max_frames
+
+    def extract(self, video_path: Path) -&gt; tuple[TemporaryDirectory, list[VideoFrame]]:
+        temp_dir = TemporaryDirectory(prefix=&quot;railway-ai-frames-&quot;)
+        output_dir = Path(temp_dir.name)
+
+        if not shutil.which(&quot;ffmpeg&quot;):
+            return temp_dir, []
+
+        pattern = output_dir / &quot;frame_%05d.jpg&quot;
+        command = [
+            &quot;ffmpeg&quot;,
+            &quot;-hide_banner&quot;,
+            &quot;-loglevel&quot;,
+            &quot;error&quot;,
+            &quot;-i&quot;,
+            str(video_path),
+            &quot;-vf&quot;,
+            f&quot;fps={self.sample_fps}&quot;,
+            &quot;-frames:v&quot;,
+            str(self.max_frames),
+            str(pattern),
+        ]
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            return temp_dir, []
+
+        interval = 1 / self.sample_fps if self.sample_fps &gt; 0 else 5
+        frames = [
+            VideoFrame(path=path, timestamp_sec=index * interval)
+            for index, path in enumerate(sorted(output_dir.glob(&quot;frame_*.jpg&quot;)))
+        ]
+        return temp_dir, frames
+</pre>
+<h3>backend/app/services/ai/mock_analyzer.py</h3>
+<pre>from pathlib import Path
+
+from .contracts import ActionFact, AnalysisFacts, DetectionFact, StepFact
+from .steps import STEP_NAMES
+
+
+class MockAnalyzer:
+    def analyze(self, video_path: Path, original_filename: str) -&gt; AnalysisFacts:
+        marker = original_filename.lower()
+        is_bad = any(word in marker for word in [&quot;bad&quot;, &quot;error&quot;, &quot;违规&quot;, &quot;错误&quot;])
+        no_glove = is_bad or any(word in marker for word in [&quot;no-glove&quot;, &quot;noglove&quot;, &quot;无手套&quot;])
+        skip_ground = any(word in marker for word in [&quot;skip-ground&quot;, &quot;noground&quot;, &quot;未接地&quot;])
+        wrong_order = any(word in marker for word in [&quot;wrong-order&quot;, &quot;顺序错误&quot;])
+
+        detections = [
+            DetectionFact(&quot;person&quot;, 0.98, 3.0, &quot;0.20,0.12,0.42,0.86&quot;),
+            DetectionFact(&quot;safety_helmet&quot;, 0.94, 4.0, &quot;0.25,0.05,0.38,0.18&quot;),
+            DetectionFact(&quot;voltage_detector&quot;, 0.88, 34.0, &quot;0.58,0.22,0.68,0.48&quot;),
+            DetectionFact(&quot;ground_wire&quot;, 0.84, 50.0, &quot;0.48,0.42,0.75,0.66&quot;),
+            DetectionFact(&quot;switch&quot;, 0.91, 68.0, &quot;0.70,0.16,0.90,0.50&quot;),
+        ]
+        if not no_glove:
+            detections.append(DetectionFact(&quot;insulating_gloves&quot;, 0.92, 5.0, &quot;0.30,0.32,0.45,0.52&quot;))
+
+        ordered_codes = [
+            &quot;ppe&quot;,
+            &quot;ticket&quot;,
+            &quot;tool_check&quot;,
+            &quot;power_off&quot;,
+            &quot;voltage_test&quot;,
+            &quot;ground_wire&quot;,
+            &quot;switch_operation&quot;,
+            &quot;review&quot;,
+            &quot;cleanup&quot;,
+        ]
+        if skip_ground and &quot;ground_wire&quot; in ordered_codes:
+            ordered_codes.remove(&quot;ground_wire&quot;)
+        if wrong_order:
+            ordered_codes = [
+                &quot;ppe&quot;,
+                &quot;ticket&quot;,
+                &quot;tool_check&quot;,
+                &quot;power_off&quot;,
+                &quot;ground_wire&quot;,
+                &quot;voltage_test&quot;,
+                &quot;switch_operation&quot;,
+                &quot;review&quot;,
+                &quot;cleanup&quot;,
+            ]
+        if is_bad and &quot;review&quot; in ordered_codes:
+            ordered_codes.remove(&quot;review&quot;)
+
+        steps: list[StepFact] = []
+        actions: list[ActionFact] = []
+        for index, code in enumerate(ordered_codes):
+            start = 6.0 + index * 10.0
+            end = start + 6.0
+            confidence = 0.90 if code in {&quot;ppe&quot;, &quot;voltage_test&quot;, &quot;ground_wire&quot;} else 0.82
+            steps.append(
+                StepFact(
+                    step_code=code,
+                    step_name=STEP_NAMES[code],
+                    start_sec=start,
+                    end_sec=end,
+                    confidence=confidence,
+                    evidence=f&quot;在 {_format_time(start)} 到 {_format_time(end)} 识别到“{STEP_NAMES[code]}”相关动作。&quot;,
+                )
+            )
+            actions.append(ActionFact(STEP_NAMES[code], confidence, start, end))
+
+        return AnalysisFacts(detections=detections, actions=actions, steps=steps, notes=[&quot;使用 mock 分析器生成演示结果&quot;])
+
+
+def _format_time(seconds: float) -&gt; str:
+    minute = int(seconds // 60)
+    second = int(seconds % 60)
+    return f&quot;{minute:02d}:{second:02d}&quot;
+</pre>
+<h3>backend/app/services/ai/multimodal.py</h3>
+<pre>from .config import AISettings
+from .contracts import ActionFact, DetectionFact, StepFact, VideoFrame
+
+
+class MultimodalExplainer:
+    def __init__(self, settings: AISettings):
+        self.settings = settings
+
+    def enrich_steps(
+        self,
+        frames: list[VideoFrame],
+        detections: list[DetectionFact],
+        actions: list[ActionFact],
+        steps: list[StepFact],
+    ) -&gt; tuple[list[StepFact], list[str]]:
+        if self.settings.multimodal_provider == &quot;openai&quot;:
+            return self._openai_enrich(frames, detections, actions, steps)
+        return steps, [&quot;多模态解释未启用，使用规则模板生成证据说明&quot;]
+
+    def _openai_enrich(
+        self,
+        frames: list[VideoFrame],
+        detections: list[DetectionFact],
+        actions: list[ActionFact],
+        steps: list[StepFact],
+    ) -&gt; tuple[list[StepFact], list[str]]:
+        if not self.settings.openai_api_key:
+            return steps, [&quot;OpenAI 多模态解释未配置 OPENAI_API_KEY，跳过&quot;]
+        try:
+            from openai import OpenAI
+
+            client = OpenAI(api_key=self.settings.openai_api_key)
+            prompt = (
+                &quot;你是铁道供电作业实训考评助手。请基于检测对象、动作识别和步骤事件，&quot;
+                &quot;生成简短、可审计的中文证据说明。不要新增没有证据支持的事实。&quot;
+            )
+            summary = {
+                &quot;detections&quot;: [item.__dict__ for item in detections[:20]],
+                &quot;actions&quot;: [item.__dict__ for item in actions[:10]],
+                &quot;steps&quot;: [item.__dict__ for item in steps],
+                &quot;sampled_frames&quot;: [str(frame.path.name) for frame in frames[:4]],
+            }
+            response = client.responses.create(
+                model=self.settings.openai_model,
+                input=[
+                    {&quot;role&quot;: &quot;system&quot;, &quot;content&quot;: prompt},
+                    {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: f&quot;结构化证据：{summary}&quot;},
+                ],
+            )
+            text = getattr(response, &quot;output_text&quot;, &quot;&quot;)
+            if text and steps:
+                steps[0].evidence = f&quot;{steps[0].evidence} 多模态说明：{text[:180]}&quot;
+            return steps, [&quot;已调用 OpenAI 多模态解释生成证据说明&quot;]
+        except Exception as exc:
+            return steps, [f&quot;OpenAI 多模态解释失败，已回退模板说明：{exc}&quot;]
+</pre>
+<h3>backend/app/services/ai/pipeline.py</h3>
+<pre>from pathlib import Path
+
+from .action_recognizer import MMActionRecognizer
+from .config import AISettings
+from .contracts import ActionFact, AnalysisFacts, DetectionFact, StepFact
+from .frame_extractor import FrameExtractor
+from .mock_analyzer import MockAnalyzer
+from .multimodal import MultimodalExplainer
+from .pose_estimator import MediaPipePoseEstimator
+from .steps import ACTION_TO_STEP, OBJECT_TO_STEP, STEP_NAMES
+from .yolo_detector import YoloDetector
+
+
+class RailwayPowerVideoAnalyzer:
+    def __init__(self, settings: AISettings | None = None):
+        self.settings = settings or AISettings()
+        self.mock = MockAnalyzer()
+        self.frame_extractor = FrameExtractor(self.settings.frame_sample_fps, self.settings.max_frames)
+        self.yolo = YoloDetector(self.settings)
+        self.pose = MediaPipePoseEstimator(self.settings)
+        self.actions = MMActionRecognizer(self.settings)
+        self.explainer = MultimodalExplainer(self.settings)
+
+    def analyze(self, video_path: Path, original_filename: str) -&gt; AnalysisFacts:
+        if self.settings.provider == &quot;mock&quot;:
+            return self.mock.analyze(video_path, original_filename)
+
+        temp_dir, frames = self.frame_extractor.extract(video_path)
+        notes: list[str] = []
+        try:
+            detections, detection_notes = self.yolo.detect(frames)
+            notes.extend(detection_notes)
+
+            _, pose_notes = self.pose.estimate(frames)
+            notes.extend(pose_notes)
+
+            actions, action_notes = self.actions.recognize(video_path)
+            notes.extend(action_notes)
+
+            if not detections and not actions:
+                fallback = self.mock.analyze(video_path, original_filename)
+                fallback.notes.extend([&quot;真实模型未产出可评分事实，已回退 mock 分析&quot;] + notes)
+                return fallback
+
+            steps = self._build_steps(detections, actions)
+            if not steps:
+                fallback = self.mock.analyze(video_path, original_filename)
+                fallback.detections = detections or fallback.detections
+                fallback.actions = actions or fallback.actions
+                fallback.notes.extend([&quot;模型事实无法映射标准步骤，已回退 mock 步骤&quot;] + notes)
+                return fallback
+
+            steps, explain_notes = self.explainer.enrich_steps(frames, detections, actions, steps)
+            notes.extend(explain_notes)
+            return AnalysisFacts(detections=detections, actions=actions, steps=steps, notes=notes)
+        finally:
+            temp_dir.cleanup()
+
+    def _build_steps(self, detections: list[DetectionFact], actions: list[ActionFact]) -&gt; list[StepFact]:
+        events: dict[str, tuple[float, float, float, str]] = {}
+
+        for detection in detections:
+            step_code = OBJECT_TO_STEP.get(detection.label)
+            if not step_code:
+                continue
+            current = events.get(step_code)
+            evidence = f&quot;{_format_time(detection.timestamp_sec)} 检测到 {detection.label}，置信度 {detection.confidence:.2f}。&quot;
+            if current is None or detection.timestamp_sec &lt; current[0]:
+                events[step_code] = (detection.timestamp_sec, detection.timestamp_sec + 3.0, detection.confidence, evidence)
+
+        for action in actions:
+            step_code = ACTION_TO_STEP.get(action.action, action.action if action.action in STEP_NAMES else &quot;&quot;)
+            if not step_code:
+                continue
+            current = events.get(step_code)
+            evidence = f&quot;{_format_time(action.start_sec)} 到 {_format_time(action.end_sec)} 识别到动作“{action.action}”。&quot;
+            if current is None or action.confidence &gt; current[2]:
+                events[step_code] = (action.start_sec, action.end_sec, action.confidence, evidence)
+
+        steps = [
+            StepFact(
+                step_code=code,
+                step_name=STEP_NAMES[code],
+                start_sec=value[0],
+                end_sec=value[1],
+                confidence=value[2],
+                evidence=value[3],
+            )
+            for code, value in events.items()
+            if code in STEP_NAMES
+        ]
+        return sorted(steps, key=lambda item: item.start_sec)
+
+
+def _format_time(seconds: float) -&gt; str:
+    minute = int(seconds // 60)
+    second = int(seconds % 60)
+    return f&quot;{minute:02d}:{second:02d}&quot;
+</pre>
+<h3>backend/app/services/ai/pose_estimator.py</h3>
+<pre>import json
+from typing import Any
+
+from .config import AISettings
+from .contracts import PoseFact, VideoFrame
+
+
+class MediaPipePoseEstimator:
+    def __init__(self, settings: AISettings):
+        self.settings = settings
+        self.detector: Any | None = None
+        self.error: str | None = None
+        if not settings.mediapipe_enabled:
+            self.error = &quot;MediaPipe 未启用&quot;
+            return
+        try:
+            import mediapipe as mp
+
+            self.mp = mp
+            self.detector = mp.solutions.pose.Pose(static_image_mode=True, model_complexity=1)
+        except Exception as exc:
+            self.error = f&quot;MediaPipe 初始化失败：{exc}&quot;
+
+    def estimate(self, frames: list[VideoFrame]) -&gt; tuple[list[PoseFact], list[str]]:
+        if not self.detector:
+            return [], [self.error or &quot;MediaPipe pose unavailable&quot;]
+
+        try:
+            import cv2
+        except Exception as exc:
+            return [], [f&quot;OpenCV 不可用，跳过 MediaPipe 姿态识别：{exc}&quot;]
+
+        poses: list[PoseFact] = []
+        notes: list[str] = []
+        for frame in frames:
+            image = cv2.imread(str(frame.path))
+            if image is None:
+                continue
+            rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            result = self.detector.process(rgb)
+            if not result.pose_landmarks:
+                continue
+            landmarks = [
+                {&quot;x&quot;: item.x, &quot;y&quot;: item.y, &quot;z&quot;: item.z, &quot;visibility&quot;: item.visibility}
+                for item in result.pose_landmarks.landmark
+            ]
+            visibility = sum(item[&quot;visibility&quot;] for item in landmarks) / len(landmarks)
+            poses.append(PoseFact(frame.timestamp_sec, float(visibility), json.dumps(landmarks, ensure_ascii=False)))
+        return poses, notes
+</pre>
+<h3>backend/app/services/ai/steps.py</h3>
+<pre>STEP_NAMES = {
+    &quot;ppe&quot;: &quot;穿戴防护用品&quot;,
+    &quot;ticket&quot;: &quot;确认工作票/操作票&quot;,
+    &quot;tool_check&quot;: &quot;检查工器具&quot;,
+    &quot;power_off&quot;: &quot;停电确认&quot;,
+    &quot;voltage_test&quot;: &quot;验电&quot;,
+    &quot;ground_wire&quot;: &quot;挂接地线&quot;,
+    &quot;switch_operation&quot;: &quot;操作开关/隔离开关&quot;,
+    &quot;review&quot;: &quot;复核状态&quot;,
+    &quot;cleanup&quot;: &quot;清理现场&quot;,
+}
+
+
+OBJECT_TO_STEP = {
+    &quot;safety_helmet&quot;: &quot;ppe&quot;,
+    &quot;insulating_gloves&quot;: &quot;ppe&quot;,
+    &quot;insulating_boots&quot;: &quot;ppe&quot;,
+    &quot;work_ticket&quot;: &quot;ticket&quot;,
+    &quot;operation_ticket&quot;: &quot;ticket&quot;,
+    &quot;voltage_detector&quot;: &quot;voltage_test&quot;,
+    &quot;ground_wire&quot;: &quot;ground_wire&quot;,
+    &quot;switch&quot;: &quot;switch_operation&quot;,
+    &quot;disconnect_switch&quot;: &quot;switch_operation&quot;,
+    &quot;circuit_breaker&quot;: &quot;switch_operation&quot;,
+}
+
+
+ACTION_TO_STEP = {
+    &quot;穿戴防护用品&quot;: &quot;ppe&quot;,
+    &quot;确认工作票/操作票&quot;: &quot;ticket&quot;,
+    &quot;检查工器具&quot;: &quot;tool_check&quot;,
+    &quot;停电确认&quot;: &quot;power_off&quot;,
+    &quot;验电&quot;: &quot;voltage_test&quot;,
+    &quot;挂接地线&quot;: &quot;ground_wire&quot;,
+    &quot;操作开关/隔离开关&quot;: &quot;switch_operation&quot;,
+    &quot;复核状态&quot;: &quot;review&quot;,
+    &quot;清理现场&quot;: &quot;cleanup&quot;,
+}
+</pre>
+<h3>backend/app/services/ai/yolo_detector.py</h3>
+<pre>from pathlib import Path
+from typing import Any
+
+from .config import AISettings, model_path
+from .contracts import DetectionFact, VideoFrame
+
+
+class YoloDetector:
+    def __init__(self, settings: AISettings):
+        self.settings = settings
+        self.model: Any | None = None
+        self.error: str | None = None
+        if not settings.yolo_enabled:
+            self.error = &quot;YOLO 未启用或未配置 YOLO_MODEL_PATH&quot;
+            return
+        try:
+            from ultralytics import YOLO
+
+            path = model_path(settings.yolo_model_path)
+            self.model = YOLO(str(path))
+        except Exception as exc:
+            self.error = f&quot;YOLO 初始化失败：{exc}&quot;
+
+    def detect(self, frames: list[VideoFrame]) -&gt; tuple[list[DetectionFact], list[str]]:
+        if not self.model:
+            return [], [self.error or &quot;YOLO detector unavailable&quot;]
+
+        detections: list[DetectionFact] = []
+        notes: list[str] = []
+        for frame in frames:
+            try:
+                results = self.model.predict(str(frame.path), conf=self.settings.yolo_confidence, verbose=False)
+            except Exception as exc:
+                notes.append(f&quot;YOLO 推理失败 {frame.path.name}: {exc}&quot;)
+                continue
+
+            for result in results:
+                names = result.names
+                boxes = getattr(result, &quot;boxes&quot;, None)
+                if boxes is None:
+                    continue
+                for box in boxes:
+                    cls_id = int(box.cls[0])
+                    conf = float(box.conf[0])
+                    xyxy = [float(value) for value in box.xyxy[0].tolist()]
+                    label = str(names.get(cls_id, cls_id))
+                    detections.append(
+                        DetectionFact(
+                            label=label,
+                            confidence=conf,
+                            timestamp_sec=frame.timestamp_sec,
+                            bbox=&quot;,&quot;.join(f&quot;{value:.4f}&quot; for value in xyxy),
+                        )
+                    )
+        return detections, notes
+</pre>
+<h3>backend/app/services/analyzer.py</h3>
+<pre>from pathlib import Path
+
+from .ai.contracts import ActionFact, AnalysisFacts, DetectionFact, StepFact
+from .ai.pipeline import RailwayPowerVideoAnalyzer
+
+
+class Analyzer:
+    &quot;&quot;&quot;Compatibility facade used by the existing analysis job router.&quot;&quot;&quot;
+
+    def __init__(self):
+        self.pipeline = RailwayPowerVideoAnalyzer()
+
+    def analyze(self, video_path: Path, original_filename: str) -&gt; AnalysisFacts:
+        return self.pipeline.analyze(video_path, original_filename)
+
+
+__all__ = [&quot;Analyzer&quot;, &quot;ActionFact&quot;, &quot;AnalysisFacts&quot;, &quot;DetectionFact&quot;, &quot;StepFact&quot;]
+</pre>
+<h3>backend/app/services/report.py</h3>
+<pre>from sqlmodel import Session, select
+
+from ..models import EvaluationReport, KnowledgeDocument, StepEvent, Violation
+
+
+def generate_report(session: Session, job_id: int, score: float) -&gt; EvaluationReport:
+    steps = session.exec(select(StepEvent).where(StepEvent.job_id == job_id).order_by(StepEvent.start_sec)).all()
+    violations = session.exec(select(Violation).where(Violation.job_id == job_id).order_by(Violation.deduction.desc())).all()
+    docs = session.exec(select(KnowledgeDocument).limit(3)).all()
+
+    step_names = &quot;、&quot;.join(step.step_name for step in steps) or &quot;未识别到有效操作步骤&quot;
+    doc_titles = &quot;、&quot;.join(doc.title for doc in docs)
+
+    if score &gt;= 90:
+        conclusion = &quot;本次作业流程整体规范，关键安全步骤识别完整，建议作为合格示范视频归档。&quot;
+    elif score &gt;= 70:
+        conclusion = &quot;本次作业基本完成，但存在需要教师复核和学生整改的扣分项。&quot;
+    else:
+        conclusion = &quot;本次作业存在较明显安全或流程问题，建议重新训练并复评。&quot;
+
+    strengths = f&quot;系统识别到的操作流程包括：{step_names}。评价参考知识库依据：{doc_titles}。&quot;
+    if violations:
+        problems = &quot;；&quot;.join(f&quot;{item.title}（扣 {item.deduction:g} 分）：{item.reason}&quot; for item in violations)
+        suggestions = &quot;；&quot;.join(item.suggestion for item in violations)
+    else:
+        problems = &quot;未发现硬性规则扣分项。&quot;
+        suggestions = &quot;保持作业前防护检查、操作中步骤口述和操作后复核的完整视频证据。&quot;
+
+    return EvaluationReport(
+        job_id=job_id,
+        score=score,
+        conclusion=conclusion,
+        strengths=strengths,
+        problems=problems,
+        suggestions=suggestions,
+    )
+</pre>
+<h3>backend/app/services/rule_engine.py</h3>
+<pre>from sqlmodel import Session, select
+
+from ..models import DetectionResult, ScoringRule, StepEvent, Violation
+
+
+PPE_LABELS = {&quot;safety_helmet&quot;, &quot;insulating_gloves&quot;}
+
+
+def evaluate_rules(session: Session, job_id: int) -&gt; tuple[float, list[Violation]]:
+    rules = session.exec(select(ScoringRule).order_by(ScoringRule.id)).all()
+    steps = session.exec(select(StepEvent).where(StepEvent.job_id == job_id)).all()
+    detections = session.exec(select(DetectionResult).where(DetectionResult.job_id == job_id)).all()
+
+    step_by_code = {step.step_code: step for step in steps}
+    detected_labels = {item.label for item in detections}
+    violations: list[Violation] = []
+
+    for rule in rules:
+        violation = None
+        if rule.rule_type == &quot;detection_required&quot; and rule.target_code == &quot;ppe&quot;:
+            missing = sorted(PPE_LABELS - detected_labels)
+            if missing:
+                violation = Violation(
+                    job_id=job_id,
+                    rule_code=rule.code,
+                    title=rule.title,
+                    deduction=rule.deduction,
+                    severity=rule.severity,
+                    timestamp_sec=0,
+                    reason=f&quot;视频证据未完整识别到防护用品：{', '.join(missing)}。&quot;,
+                    suggestion=&quot;进入作业区域前完成安全帽、绝缘手套、绝缘靴等防护用品检查，并在视频中清晰展示。&quot;,
+                )
+        elif rule.rule_type == &quot;step_required&quot;:
+            if rule.target_code not in step_by_code:
+                violation = Violation(
+                    job_id=job_id,
+                    rule_code=rule.code,
+                    title=rule.title,
+                    deduction=rule.deduction,
+                    severity=rule.severity,
+                    timestamp_sec=None,
+                    reason=f&quot;未识别到必需步骤：{rule.description}&quot;,
+                    suggestion=&quot;按标准流程补充该步骤，并保证动作完整、可见、可复核。&quot;,
+                )
+        elif rule.rule_type == &quot;sequence&quot;:
+            before_code, after_code = rule.target_code.split(&quot;&gt;&quot;, 1)
+            before = step_by_code.get(before_code)
+            after = step_by_code.get(after_code)
+            if before and after and before.start_sec &gt; after.start_sec:
+                violation = Violation(
+                    job_id=job_id,
+                    rule_code=rule.code,
+                    title=rule.title,
+                    deduction=rule.deduction,
+                    severity=rule.severity,
+                    timestamp_sec=after.start_sec,
+                    reason=f&quot;识别到“{after.step_name}”发生在“{before.step_name}”之前，不符合操作顺序。&quot;,
+                    suggestion=rule.description,
+                )
+
+        if violation:
+            session.add(violation)
+            violations.append(violation)
+
+    score = max(0.0, 100.0 - sum(item.deduction for item in violations))
+    return score, violations
+</pre>
+<h3>backend/requirements.txt</h3>
+<pre>fastapi==0.115.6
+uvicorn[standard]==0.32.1
+sqlmodel==0.0.22
+python-multipart==0.0.19
+pydantic==2.10.3
+
+# Optional real AI backends. Install only on machines that need model inference.
+# ultralytics&gt;=8.3.0
+# opencv-python&gt;=4.10.0
+# mediapipe&gt;=0.10.14
+# openai&gt;=1.59.0
+# MMAction2 is usually installed from its official docs with matching PyTorch/CUDA.
+</pre>
+<h3>backend/smoke_test.py</h3>
+<pre>from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+
+def main() -&gt; None:
+    with TestClient(app) as client:
+        health = client.get(&quot;/api/health&quot;)
+        assert health.status_code == 200, health.text
+
+        steps = client.get(&quot;/api/catalog/steps&quot;)
+        assert steps.status_code == 200, steps.text
+        assert len(steps.json()) &gt;= 9
+
+        task_payload = {
+            &quot;title&quot;: &quot;冒烟测试-接触网停电验电接地&quot;,
+            &quot;course&quot;: &quot;铁道供电安全实训&quot;,
+            &quot;class_name&quot;: &quot;冒烟测试班&quot;,
+            &quot;teacher&quot;: &quot;系统测试&quot;,
+            &quot;description&quot;: &quot;用于验证创建任务、上传视频、自动分析和报告生成。&quot;,
+        }
+        task = client.post(&quot;/api/tasks&quot;, json=task_payload)
+        assert task.status_code == 200, task.text
+        task_id = task.json()[&quot;id&quot;]
+
+        sample = Path(&quot;data/uploads/smoke-no-glove.txt&quot;)
+        sample.parent.mkdir(parents=True, exist_ok=True)
+        sample.write_text(&quot;fake video bytes for smoke test&quot;, encoding=&quot;utf-8&quot;)
+
+        with sample.open(&quot;rb&quot;) as file:
+            upload = client.post(
+                &quot;/api/submissions&quot;,
+                data={&quot;task_id&quot;: str(task_id), &quot;student_name&quot;: &quot;冒烟学生&quot;, &quot;student_no&quot;: &quot;SMOKE001&quot;},
+                files={&quot;file&quot;: (&quot;smoke-no-glove.mp4&quot;, file, &quot;video/mp4&quot;)},
+            )
+        assert upload.status_code == 200, upload.text
+        job_id = upload.json()[&quot;job&quot;][&quot;id&quot;]
+
+        detail = client.get(f&quot;/api/analysis/jobs/{job_id}/detail&quot;)
+        assert detail.status_code == 200, detail.text
+        payload = detail.json()
+        assert payload[&quot;job&quot;][&quot;status&quot;] == &quot;completed&quot;, payload[&quot;job&quot;]
+        assert payload[&quot;report&quot;][&quot;score&quot;] &lt; 100
+        assert payload[&quot;violations&quot;], &quot;Expected no-glove violation&quot;
+        print(
+            {
+                &quot;health&quot;: health.json()[&quot;status&quot;],
+                &quot;steps&quot;: len(steps.json()),
+                &quot;task_id&quot;: task_id,
+                &quot;job_id&quot;: job_id,
+                &quot;status&quot;: payload[&quot;job&quot;][&quot;status&quot;],
+                &quot;score&quot;: payload[&quot;report&quot;][&quot;score&quot;],
+                &quot;violations&quot;: [item[&quot;title&quot;] for item in payload[&quot;violations&quot;]],
+            }
+        )
+
+
+if __name__ == &quot;__main__&quot;:
+    main()
+</pre>
+<h3>frontend/index.html</h3>
+<pre>&lt;!doctype html&gt;
+&lt;html lang=&quot;zh-CN&quot;&gt;
+  &lt;head&gt;
+    &lt;meta charset=&quot;UTF-8&quot; /&gt;
+    &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot; /&gt;
+    &lt;title&gt;铁道供电作业视频智能评价平台&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;div id=&quot;app&quot;&gt;&lt;/div&gt;
+    &lt;script type=&quot;module&quot; src=&quot;/src/main.js&quot;&gt;&lt;/script&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+</pre>
+<h3>frontend/package-lock.json</h3>
+<pre>{
+  &quot;name&quot;: &quot;railway-power-operation-video-ai-evaluator&quot;,
+  &quot;version&quot;: &quot;1.0.0&quot;,
+  &quot;lockfileVersion&quot;: 3,
+  &quot;requires&quot;: true,
+  &quot;packages&quot;: {
+    &quot;&quot;: {
+      &quot;name&quot;: &quot;railway-power-operation-video-ai-evaluator&quot;,
+      &quot;version&quot;: &quot;1.0.0&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@vitejs/plugin-vue&quot;: &quot;^5.2.1&quot;,
+        &quot;vite&quot;: &quot;^6.0.3&quot;,
+        &quot;vue&quot;: &quot;^3.5.13&quot;
+      },
+      &quot;devDependencies&quot;: {}
+    },
+    &quot;node_modules/@babel/helper-string-parser&quot;: {
+      &quot;version&quot;: &quot;7.29.7&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-Pb5ijPrZ89GDH8223L4UP8i6QApWxs04RbPQJTeWDV0/keR2E36MeKnyr6LYmUUvqRRI+Iv87SuF1W6ErINzYw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=6.9.0&quot;
+      }
+    },
+    &quot;node_modules/@babel/helper-validator-identifier&quot;: {
+      &quot;version&quot;: &quot;7.29.7&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-qehxGkRj55h/ff8EMaJ+cYhyaKlHIxqYDn682wQD7RNp9UujOQsHog2uS0r2vzr4pW+sXf90NeeayjcNaX3fFg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=6.9.0&quot;
+      }
+    },
+    &quot;node_modules/@babel/parser&quot;: {
+      &quot;version&quot;: &quot;7.29.7&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-hnORnjP/1P/zFEndoeX+n+t1RwWRJiJpM/jO7FW32Kn9r5+sJB2JWOdYo4L6k78j15eCwY3Gm/7364B1EMwtNg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@babel/types&quot;: &quot;^7.29.7&quot;
+      },
+      &quot;bin&quot;: {
+        &quot;parser&quot;: &quot;bin/babel-parser.js&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=6.0.0&quot;
+      }
+    },
+    &quot;node_modules/@babel/types&quot;: {
+      &quot;version&quot;: &quot;7.29.7&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-4zBIxpPzowiZpusoFkyGVwakdRJUyuH5PxQ/PrqghfdFWWasvnCdPfQXHrenDai+gyLARulZjZowCOj6fjT4pA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@babel/helper-string-parser&quot;: &quot;^7.29.7&quot;,
+        &quot;@babel/helper-validator-identifier&quot;: &quot;^7.29.7&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=6.9.0&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/aix-ppc64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-Hhmwd6CInZ3dwpuGTF8fJG6yoWmsToE+vYgD4nytZVxcu1ulHpUQRAB1UJ8+N1Am3Mz4+xOByoQoSZf4D+CpkA==&quot;,
+      &quot;cpu&quot;: [
+        &quot;ppc64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;aix&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/android-arm&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-VJ+sKvNA/GE7Ccacc9Cha7bpS8nyzVv0jdVgwNDaR4gDMC/2TTRc33Ip8qrNYUcpkOHUT5OZ0bUcNNVZQ9RLlg==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;android&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/android-arm64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-6AAmLG7zwD1Z159jCKPvAxZd4y/VTO0VkprYy+3N2FtJ8+BQWFXU+OxARIwA46c5tdD9SsKGZ/1ocqBS/gAKHg==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;android&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/android-x64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-5jbb+2hhDHx5phYR2By8GTWEzn6I9UqR11Kwf22iKbNpYrsmRB18aX/9ivc5cabcUiAT/wM+YIZ6SG9QO6a8kg==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;android&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/darwin-arm64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-N3zl+lxHCifgIlcMUP5016ESkeQjLj/959RxxNYIthIg+CQHInujFuXeWbWMgnTo4cp5XVHqFPmpyu9J65C1Yg==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;darwin&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/darwin-x64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-HQ9ka4Kx21qHXwtlTUVbKJOAnmG1ipXhdWTmNXiPzPfWKpXqASVcWdnf2bnL73wgjNrFXAa3yYvBSd9pzfEIpA==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;darwin&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/freebsd-arm64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-gA0Bx759+7Jve03K1S0vkOu5Lg/85dou3EseOGUes8flVOGxbhDDh/iZaoek11Y8mtyKPGF3vP8XhnkDEAmzeg==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;freebsd&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/freebsd-x64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-TGbO26Yw2xsHzxtbVFGEXBFH0FRAP7gtcPE7P5yP7wGy7cXK2oO7RyOhL5NLiqTlBh47XhmIUXuGciXEqYFfBQ==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;freebsd&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/linux-arm&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-lPDGyC1JPDou8kGcywY0YILzWlhhnRjdof3UlcoqYmS9El818LLfJJc3PXXgZHrHCAKs/Z2SeZtDJr5MrkxtOw==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/linux-arm64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-8bwX7a8FghIgrupcxb4aUmYDLp8pX06rGh5HqDT7bB+8Rdells6mHvrFHHW2JAOPZUbnjUpKTLg6ECyzvas2AQ==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/linux-ia32&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-0y9KrdVnbMM2/vG8KfU0byhUN+EFCny9+8g202gYqSSVMonbsCfLjUO+rCci7pM0WBEtz+oK/PIwHkzxkyharA==&quot;,
+      &quot;cpu&quot;: [
+        &quot;ia32&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/linux-loong64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-h///Lr5a9rib/v1GGqXVGzjL4TMvVTv+s1DPoxQdz7l/AYv6LDSxdIwzxkrPW438oUXiDtwM10o9PmwS/6Z0Ng==&quot;,
+      &quot;cpu&quot;: [
+        &quot;loong64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/linux-mips64el&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-iyRrM1Pzy9GFMDLsXn1iHUm18nhKnNMWscjmp4+hpafcZjrr2WbT//d20xaGljXDBYHqRcl8HnxbX6uaA/eGVw==&quot;,
+      &quot;cpu&quot;: [
+        &quot;mips64el&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/linux-ppc64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-9meM/lRXxMi5PSUqEXRCtVjEZBGwB7P/D4yT8UG/mwIdze2aV4Vo6U5gD3+RsoHXKkHCfSxZKzmDssVlRj1QQA==&quot;,
+      &quot;cpu&quot;: [
+        &quot;ppc64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/linux-riscv64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-Zr7KR4hgKUpWAwb1f3o5ygT04MzqVrGEGXGLnj15YQDJErYu/BGg+wmFlIDOdJp0PmB0lLvxFIOXZgFRrdjR0w==&quot;,
+      &quot;cpu&quot;: [
+        &quot;riscv64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/linux-s390x&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-MsKncOcgTNvdtiISc/jZs/Zf8d0cl/t3gYWX8J9ubBnVOwlk65UIEEvgBORTiljloIWnBzLs4qhzPkJcitIzIg==&quot;,
+      &quot;cpu&quot;: [
+        &quot;s390x&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/linux-x64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-uqZMTLr/zR/ed4jIGnwSLkaHmPjOjJvnm6TVVitAa08SLS9Z0VM8wIRx7gWbJB5/J54YuIMInDquWyYvQLZkgw==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/netbsd-arm64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-xXwcTq4GhRM7J9A8Gv5boanHhRa/Q9KLVmcyXHCTaM4wKfIpWkdXiMog/KsnxzJ0A1+nD+zoecuzqPmCRyBGjg==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;netbsd&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/netbsd-x64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-Ld5pTlzPy3YwGec4OuHh1aCVCRvOXdH8DgRjfDy/oumVovmuSzWfnSJg+VtakB9Cm0gxNO9BzWkj6mtO1FMXkQ==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;netbsd&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/openbsd-arm64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-fF96T6KsBo/pkQI950FARU9apGNTSlZGsv1jZBAlcLL1MLjLNIWPBkj5NlSz8aAzYKg+eNqknrUJ24QBybeR5A==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;openbsd&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/openbsd-x64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-MZyXUkZHjQxUvzK7rN8DJ3SRmrVrke8ZyRusHlP+kuwqTcfWLyqMOE3sScPPyeIXN/mDJIfGXvcMqCgYKekoQw==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;openbsd&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/openharmony-arm64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-rm0YWsqUSRrjncSXGA7Zv78Nbnw4XL6/dzr20cyrQf7ZmRcsovpcRBdhD43Nuk3y7XIoW2OxMVvwuRvk9XdASg==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;openharmony&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/sunos-x64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-3wGSCDyuTHQUzt0nV7bocDy72r2lI33QL3gkDNGkod22EsYl04sMf0qLb8luNKTOmgF/eDEDP5BFNwoBKH441w==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;sunos&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/win32-arm64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-rMmLrur64A7+DKlnSuwqUdRKyd3UE7oPJZmnljqEptesKM8wx9J8gx5u0+9Pq0fQQW8vqeKebwNXdfOyP+8Bsg==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;win32&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/win32-ia32&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-HkqnmmBoCbCwxUKKNPBixiWDGCpQGVsrQfJoVGYLPT41XWF8lHuE5N6WhVia2n4o5QK5M4tYr21827fNhi4byQ==&quot;,
+      &quot;cpu&quot;: [
+        &quot;ia32&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;win32&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@esbuild/win32-x64&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-alJC0uCZpTFrSL0CCDjcgleBXPnCrEAhTBILpeAp7M/OFgoqtAetfBzX0xM00MUsVVPpVjlPuMbREqnZCXaTnA==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;win32&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      }
+    },
+    &quot;node_modules/@jridgewell/sourcemap-codec&quot;: {
+      &quot;version&quot;: &quot;1.5.5&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/@rollup/rollup-android-arm-eabi&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-F5QXMSiFebS9hKZj02XhWLLnRpJ3B3AROP0tWbFBSj+6kCbg5m9j5JoHKd4mmSVy5mS/IMQloYgYxCuJC0fxEQ==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;android&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-android-arm64&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-GxxTKApUpzRhof7poWvCJHRF51C67u1R7D6DiluBE8wKU1u5GWE8t+v81JvJYtbawoBFX1hLv5Ei4eVjkWokaw==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;android&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-darwin-arm64&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-tua0TaJxMOB1R0V0RS1jFZ/RpURFDJIOR2A6jWwQeawuFyS4gBW+rntLRaQd0EQ4bd6Vp44Z2rXW+YYDBsj6IA==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;darwin&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-darwin-x64&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-CSKq7MsP+5PFIcydhAiR1K0UhEI1A2jWXVKHPCBZ151yOutENwvnPocgVHkivu2kviURtCEB6zUQw0vs8RrhMg==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;darwin&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-freebsd-arm64&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-+O8OkVdyvXMtJEciu2wS/pzm1IxntEEQx3z5TAVy4l32G0etZn+RsA48ARRrFm6Ri8fvqPQfgrvNxSjKAbnd3g==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;freebsd&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-freebsd-x64&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-Iw3oMskH3AfNuhU0MSN7vNbdi4me/NiYo2azqPz/Le16zHSa+3RRmliCMWWQmh4lcndccU40xcJuTYJZxNo/lw==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;freebsd&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-linux-arm-gnueabihf&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-EIPRXTVQpHyF8WOo219AD2yEltPehLTcTMz2fn6JsatLYSzQf00hj3rulF+yauOlF9/FtM2WpkT/hJh/KJFGhA==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm&quot;
+      ],
+      &quot;libc&quot;: [
+        &quot;glibc&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-linux-arm-musleabihf&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-J3Yh9PzzF1Ovah2At+lHiGQdsYgArxBbXv/zHfSyaiFQEqvNv7DcW98pCrmdjCZBrqBiKrKKe2V+aaSGWuBe/w==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm&quot;
+      ],
+      &quot;libc&quot;: [
+        &quot;musl&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-linux-arm64-gnu&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-BFDEZMYfUvLn37ONE1yMBojPxnMlTFsdyNoqncT0qFq1mAfllL+ATMMJd8TeuVMiX84s1KbcxcZbXInmcO2mRg==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;libc&quot;: [
+        &quot;glibc&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-linux-arm64-musl&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-pc9EYOSlOgdQ2uPl1o9PF6/kLSgaUosia7gOuS8mB69IxJvlclko1MECXysjs5ryez1/5zjYqx3+xYU0TU6R1A==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;libc&quot;: [
+        &quot;musl&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-linux-loong64-gnu&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-NxnomyxYerDh5n4iLrNa+sH+Z+U4BMEE46V2PgQ/hoB909i8gV1M5wPojWg9fk1jWpO3IQnOs20K4wyZuFLEFQ==&quot;,
+      &quot;cpu&quot;: [
+        &quot;loong64&quot;
+      ],
+      &quot;libc&quot;: [
+        &quot;glibc&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-linux-loong64-musl&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-nbJnQ8a3z1mtmrwImCYhc6BGpThAyYVRQxw9uKSKG4wR6aAYno9sVjJ0zaZcW9BPJX1GbrDPf+SvdWjgTuDmnw==&quot;,
+      &quot;cpu&quot;: [
+        &quot;loong64&quot;
+      ],
+      &quot;libc&quot;: [
+        &quot;musl&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-linux-ppc64-gnu&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-2EU6acNrQLd8tYvo/LXW535wupT3m6fo7HKo6lr7ktQoItxTyOL1ZCR/GfGCuXl2vR+zmfI6eRXkSemafv+iVg==&quot;,
+      &quot;cpu&quot;: [
+        &quot;ppc64&quot;
+      ],
+      &quot;libc&quot;: [
+        &quot;glibc&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-linux-ppc64-musl&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-WeBtoMuaMxiiIrO2IYP3xs6GMWkJP2C0EoT8beTLkUPmzV1i/UcOSVw1d5r9KBODtHKilG5yFxsGRnBbK3wJ4A==&quot;,
+      &quot;cpu&quot;: [
+        &quot;ppc64&quot;
+      ],
+      &quot;libc&quot;: [
+        &quot;musl&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-linux-riscv64-gnu&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-FJHFfqpKUI3A10WrWKiFbBZ7yVbGT4q4B5o1qKFFojqpaYoh9LrQgqWCmmcxQzVSXYtyB5bzkXrYzlHTs21MYA==&quot;,
+      &quot;cpu&quot;: [
+        &quot;riscv64&quot;
+      ],
+      &quot;libc&quot;: [
+        &quot;glibc&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-linux-riscv64-musl&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-mcEl6CUT5IAUmQf1m9FYSmVqCJlpQ8r8eyftFUHG8i9OhY7BkBXSUdnLH5DOf0wCOjcP9v/QO93zpmF1SptCCw==&quot;,
+      &quot;cpu&quot;: [
+        &quot;riscv64&quot;
+      ],
+      &quot;libc&quot;: [
+        &quot;musl&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-linux-s390x-gnu&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-ynt3JxVd2w2buzoKDWIyiV1pJW93xlQic1THVLXilz429oijRpSHivZAgp65KBu+cMcgf1eVVjdnTLvPxgCuoQ==&quot;,
+      &quot;cpu&quot;: [
+        &quot;s390x&quot;
+      ],
+      &quot;libc&quot;: [
+        &quot;glibc&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-linux-x64-gnu&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-Boiz5+MsaROEWDf+GGEwF8VMHGhlUoQMtIPjOgA5fv4osupqTVnJteQNKJwUcnUog2G55jYXH7KZFFiJe0TEzQ==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;libc&quot;: [
+        &quot;glibc&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-linux-x64-musl&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-+qfSY27qIrFfI/Hom04KYFw3GKZSGU4lXus51wsb5EuySfFlWRwjkKWoE9emgRw/ukoT4Udsj4W/+xxG8VbPKg==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;libc&quot;: [
+        &quot;musl&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;linux&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-openbsd-x64&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-VpTfOPHgVXEBeeR8hZ2O0F3aSso+JDWqTWmTmzcQKted54IAdUVbxE+j/MVxUsKa8L20HJhv3vUezVPoquqWjA==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;openbsd&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-openharmony-arm64&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-IPOsh5aRYuLv/nkU51X10Bf75Bsf6+gZdx1X+QP5QM6lIJFHHqbHLG0uJn/hWthzo13UAc2umiUorqZy3axoZg==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;openharmony&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-win32-arm64-msvc&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-4QzE9E81OohJ/HKzHhsqU+zcYYojVOXlFMs1DdyMT6qXl/niOH7AVElmmEdUNHHS/oRkc++d5k6Vy85zFs0DEw==&quot;,
+      &quot;cpu&quot;: [
+        &quot;arm64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;win32&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-win32-ia32-msvc&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-zTPgT1YuHHcd+Tmx7h8aml0FWFVelV5N54oHow9SLj+GfoDy/huQ+UV396N/C7KpMDMiPspRktzM1/0r1usYEA==&quot;,
+      &quot;cpu&quot;: [
+        &quot;ia32&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;win32&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-win32-x64-gnu&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-DRS4G7mi9lJxqEDezIkKCaUIKCrLUUDCUaCsTPCi/rtqaC6D/jjwslMQyiDU50Ka0JKpeXeRBFBAXwArY52vBw==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;win32&quot;
+      ]
+    },
+    &quot;node_modules/@rollup/rollup-win32-x64-msvc&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-QVTUovf40zgTqlFVrKA1uXMVvU2QWEFWfAH8Wdc48IxLvrJMQVMBRjuQyUpzZCDkakImib9eVazbWlC6ksWtJw==&quot;,
+      &quot;cpu&quot;: [
+        &quot;x64&quot;
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;win32&quot;
+      ]
+    },
+    &quot;node_modules/@types/estree&quot;: {
+      &quot;version&quot;: &quot;1.0.8&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/@vitejs/plugin-vue&quot;: {
+      &quot;version&quot;: &quot;5.2.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-7Yx/SXSOcQq5HiiV3orevHUFn+pmMB4cgbEkDYgnkUWb0WfeQ/wa2yFv6D5ICiCQOVpjA7vYDXrC7AGO8yjDHA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;^18.0.0 || &gt;=20.0.0&quot;
+      },
+      &quot;peerDependencies&quot;: {
+        &quot;vite&quot;: &quot;^5.0.0 || ^6.0.0&quot;,
+        &quot;vue&quot;: &quot;^3.2.25&quot;
+      }
+    },
+    &quot;node_modules/@vue/compiler-core&quot;: {
+      &quot;version&quot;: &quot;3.5.34&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-s9cLyK5mLcvZ4Agva5QgRsQyLKvts9WbU9DB6NqiZkkGEdwmcEiylj5Jbwkp680drF/NNCV8OlAJSe+yMLxaJw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@babel/parser&quot;: &quot;^7.29.3&quot;,
+        &quot;@vue/shared&quot;: &quot;3.5.34&quot;,
+        &quot;entities&quot;: &quot;^7.0.1&quot;,
+        &quot;estree-walker&quot;: &quot;^2.0.2&quot;,
+        &quot;source-map-js&quot;: &quot;^1.2.1&quot;
+      }
+    },
+    &quot;node_modules/@vue/compiler-dom&quot;: {
+      &quot;version&quot;: &quot;3.5.34&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-EbF/T++k0e2MMZlJsBhzK8Sgwt0HcIPOhzn1CTB/lv6sQcyk+OWf8YeiLxZp3ro7MbbLcAfAJ6sEvjFWuNgUCw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@vue/compiler-core&quot;: &quot;3.5.34&quot;,
+        &quot;@vue/shared&quot;: &quot;3.5.34&quot;
+      }
+    },
+    &quot;node_modules/@vue/compiler-sfc&quot;: {
+      &quot;version&quot;: &quot;3.5.34&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-D/ihr6uZeIt6r+pVZf46RWT1fAsLFMbUP7k8G1VkiiWexriED9GrX3echHd4Abbt17zjlfiFJ8z7a3BxZOPNjg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@babel/parser&quot;: &quot;^7.29.3&quot;,
+        &quot;@vue/compiler-core&quot;: &quot;3.5.34&quot;,
+        &quot;@vue/compiler-dom&quot;: &quot;3.5.34&quot;,
+        &quot;@vue/compiler-ssr&quot;: &quot;3.5.34&quot;,
+        &quot;@vue/shared&quot;: &quot;3.5.34&quot;,
+        &quot;estree-walker&quot;: &quot;^2.0.2&quot;,
+        &quot;magic-string&quot;: &quot;^0.30.21&quot;,
+        &quot;postcss&quot;: &quot;^8.5.14&quot;,
+        &quot;source-map-js&quot;: &quot;^1.2.1&quot;
+      }
+    },
+    &quot;node_modules/@vue/compiler-ssr&quot;: {
+      &quot;version&quot;: &quot;3.5.34&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-cDtTHKibkThKGHH1SP+WdccquNRYQDFH6rRjQCqT9G2ltFAfoR5pUftpab/z+aM5mW9HLLVQW7hfKKQe/1GBeQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@vue/compiler-dom&quot;: &quot;3.5.34&quot;,
+        &quot;@vue/shared&quot;: &quot;3.5.34&quot;
+      }
+    },
+    &quot;node_modules/@vue/reactivity&quot;: {
+      &quot;version&quot;: &quot;3.5.34&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-y9XDjCEuBp+98k+UL5dbYkh57AHU4o6cxZedOPXw3bmrZZYLQsVHguGurq7hVrPCSrQtrnz1f9dssyFr+dMXfQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@vue/shared&quot;: &quot;3.5.34&quot;
+      }
+    },
+    &quot;node_modules/@vue/runtime-core&quot;: {
+      &quot;version&quot;: &quot;3.5.34&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-mKeBYvu8tcMSLhypAHBmriUFfWXKTCF/23Z4jiCoYK3UtWepkliViNLuR90V9XOyD62mUxs9p1jsrpK3CCGIzw==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@vue/reactivity&quot;: &quot;3.5.34&quot;,
+        &quot;@vue/shared&quot;: &quot;3.5.34&quot;
+      }
+    },
+    &quot;node_modules/@vue/runtime-dom&quot;: {
+      &quot;version&quot;: &quot;3.5.34&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-e8kZzERmCwUnBRVsgSQlAfrfU2rGoy0FFKPBXSlfEjc/O3KfA7QP0t1/2ZylrbchjmIKB4dPTd07A6WPr0eOrg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@vue/reactivity&quot;: &quot;3.5.34&quot;,
+        &quot;@vue/runtime-core&quot;: &quot;3.5.34&quot;,
+        &quot;@vue/shared&quot;: &quot;3.5.34&quot;,
+        &quot;csstype&quot;: &quot;^3.2.3&quot;
+      }
+    },
+    &quot;node_modules/@vue/server-renderer&quot;: {
+      &quot;version&quot;: &quot;3.5.34&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-nHxmJoTrKsmrkbILRhkC9gY1G3moZbJTqCzDd7DOOzG5KH9oeJ0Unqrff5f9v0pW//jES05ZkJcNtfE8JjOIew==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@vue/compiler-ssr&quot;: &quot;3.5.34&quot;,
+        &quot;@vue/shared&quot;: &quot;3.5.34&quot;
+      },
+      &quot;peerDependencies&quot;: {
+        &quot;vue&quot;: &quot;3.5.34&quot;
+      }
+    },
+    &quot;node_modules/@vue/shared&quot;: {
+      &quot;version&quot;: &quot;3.5.34&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-24uqU4OIiX29ryC3MeWid/Xf2fa2EFRUVLb77nRhk+UrTVrh/XiGtFAFmJBAtBRbjwNdsPRP+jj/OL27Eg1NDA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/csstype&quot;: {
+      &quot;version&quot;: &quot;3.2.3&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/entities&quot;: {
+      &quot;version&quot;: &quot;7.0.1&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-TWrgLOFUQTH994YUyl1yT4uyavY5nNB5muff+RtWaqNVCAK408b5ZnnbNAUEWLTCpum9w6arT70i1XdQ4UeOPA==&quot;,
+      &quot;license&quot;: &quot;BSD-2-Clause&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=0.12&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;***
+      }
+    },
+    &quot;node_modules/esbuild&quot;: {
+      &quot;version&quot;: &quot;0.25.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-bbPBYYrtZbkt6Os6FiTLCTFxvq4tt3JKall1vRwshA3fdVztsLAatFaZobhkBC8/BrPetoa0oksYoKXoG4ryJg==&quot;,
+      &quot;hasInstallScript&quot;: true,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;bin&quot;: {
+        &quot;esbuild&quot;: &quot;bin/esbuild&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18&quot;
+      },
+      &quot;optionalDependencies&quot;: {
+        &quot;@esbuild/aix-ppc64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/android-arm&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/android-arm64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/android-x64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/darwin-arm64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/darwin-x64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/freebsd-arm64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/freebsd-x64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/linux-arm&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/linux-arm64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/linux-ia32&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/linux-loong64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/linux-mips64el&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/linux-ppc64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/linux-riscv64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/linux-s390x&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/linux-x64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/netbsd-arm64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/netbsd-x64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/openbsd-arm64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/openbsd-x64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/openharmony-arm64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/sunos-x64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/win32-arm64&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/win32-ia32&quot;: &quot;0.25.12&quot;,
+        &quot;@esbuild/win32-x64&quot;: &quot;0.25.12&quot;
+      }
+    },
+    &quot;node_modules/estree-walker&quot;: {
+      &quot;version&quot;: &quot;2.0.2&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-Rfkk/Mp/DL7JVje3u18FxFujQlTNR2q6QfMSMB7AvCBx91NGj/ba3kCfza0f6dVDbw7YlRf/nDrn7pQrCCyQ/w==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;
+    },
+    &quot;node_modules/fdir&quot;: {
+      &quot;version&quot;: &quot;6.5.0&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=12.0.0&quot;
+      },
+      &quot;peerDependencies&quot;: {
+        &quot;picomatch&quot;: &quot;^3 || ^4&quot;
+      },
+      &quot;peerDependenciesMeta&quot;: {
+        &quot;picomatch&quot;: {
+          &quot;optional&quot;: true
+        }
+      }
+    },
+    &quot;node_modules/fsevents&quot;: {
+      &quot;version&quot;: &quot;2.3.3&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==&quot;,
+      &quot;hasInstallScript&quot;: true,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;optional&quot;: true,
+      &quot;os&quot;: [
+        &quot;darwin&quot;
+      ],
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;^8.16.0 || ^10.6.0 || &gt;=11.0.0&quot;
+      }
+    },
+    &quot;node_modules/magic-string&quot;: {
+      &quot;version&quot;: &quot;0.30.21&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@jridgewell/sourcemap-codec&quot;: &quot;^1.5.5&quot;
+      }
+    },
+    &quot;node_modules/nanoid&quot;: {
+      &quot;version&quot;: &quot;3.3.12&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-ZB9RH/39qpq5Vu6Y+NmUaFhQR6pp+M2Xt76XBnEwDaGcVAqhlvxrl3B2bKS5D3NH3QR76v3aSrKaF/Kiy7lEtQ==&quot;,
+      &quot;funding&quot;: [
+        {
+          &quot;type&quot;: &quot;github&quot;,
+          &quot;url&quot;: &quot;***
+        }
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;bin&quot;: {
+        &quot;nanoid&quot;: &quot;bin/nanoid.cjs&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;^10 || ^12 || ^13.7 || ^14 || &gt;=15.0.1&quot;
+      }
+    },
+    &quot;node_modules/picocolors&quot;: {
+      &quot;version&quot;: &quot;1.1.1&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==&quot;,
+      &quot;license&quot;: &quot;ISC&quot;
+    },
+    &quot;node_modules/picomatch&quot;: {
+      &quot;version&quot;: &quot;4.0.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=12&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;***
+      }
+    },
+    &quot;node_modules/postcss&quot;: {
+      &quot;version&quot;: &quot;8.5.15&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==&quot;,
+      &quot;funding&quot;: [
+        {
+          &quot;type&quot;: &quot;opencollective&quot;,
+          &quot;url&quot;: &quot;***
+        },
+        {
+          &quot;type&quot;: &quot;tidelift&quot;,
+          &quot;url&quot;: &quot;***
+        },
+        {
+          &quot;type&quot;: &quot;github&quot;,
+          &quot;url&quot;: &quot;***
+        }
+      ],
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;nanoid&quot;: &quot;^3.3.12&quot;,
+        &quot;picocolors&quot;: &quot;^1.1.1&quot;,
+        &quot;source-map-js&quot;: &quot;^1.2.1&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;^10 || ^12 || &gt;=14&quot;
+      }
+    },
+    &quot;node_modules/rollup&quot;: {
+      &quot;version&quot;: &quot;4.60.4&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-WHeFSbZYsPu3+bLoNRUuAO+wavNlocOPf3wSHTP7hcFKVnJeWsYlCDbr3mTS14FCizf9ccIxXA8sGL8zKeQN3g==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@types/estree&quot;: &quot;1.0.8&quot;
+      },
+      &quot;bin&quot;: {
+        &quot;rollup&quot;: &quot;dist/bin/rollup&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=18.0.0&quot;,
+        &quot;npm&quot;: &quot;&gt;=8.0.0&quot;
+      },
+      &quot;optionalDependencies&quot;: {
+        &quot;@rollup/rollup-android-arm-eabi&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-android-arm64&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-darwin-arm64&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-darwin-x64&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-freebsd-arm64&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-freebsd-x64&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-linux-arm-gnueabihf&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-linux-arm-musleabihf&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-linux-arm64-gnu&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-linux-arm64-musl&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-linux-loong64-gnu&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-linux-loong64-musl&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-linux-ppc64-gnu&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-linux-ppc64-musl&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-linux-riscv64-gnu&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-linux-riscv64-musl&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-linux-s390x-gnu&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-linux-x64-gnu&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-linux-x64-musl&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-openbsd-x64&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-openharmony-arm64&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-win32-arm64-msvc&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-win32-ia32-msvc&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-win32-x64-gnu&quot;: &quot;4.60.4&quot;,
+        &quot;@rollup/rollup-win32-x64-msvc&quot;: &quot;4.60.4&quot;,
+        &quot;fsevents&quot;: &quot;~2.3.2&quot;
+      }
+    },
+    &quot;node_modules/source-map-js&quot;: {
+      &quot;version&quot;: &quot;1.2.1&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==&quot;,
+      &quot;license&quot;: &quot;BSD-3-Clause&quot;,
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=0.10.0&quot;
+      }
+    },
+    &quot;node_modules/tinyglobby&quot;: {
+      &quot;version&quot;: &quot;0.2.16&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-pn99VhoACYR8nFHhxqix+uvsbXineAasWm5ojXoN8xEwK5Kd3/TrhNn1wByuD52UxWRLy8pu+kRMniEi6Eq9Zg==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;fdir&quot;: &quot;^6.5.0&quot;,
+        &quot;picomatch&quot;: &quot;^4.0.4&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;&gt;=12.0.0&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;***
+      }
+    },
+    &quot;node_modules/vite&quot;: {
+      &quot;version&quot;: &quot;6.4.2&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-2N/55r4JDJ4gdrCvGgINMy+HH3iRpNIz8K6SFwVsA+JbQScLiC+clmAxBgwiSPgcG9U15QmvqCGWzMbqda5zGQ==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;esbuild&quot;: &quot;^0.25.0&quot;,
+        &quot;fdir&quot;: &quot;^6.4.4&quot;,
+        &quot;picomatch&quot;: &quot;^4.0.2&quot;,
+        &quot;postcss&quot;: &quot;^8.5.3&quot;,
+        &quot;rollup&quot;: &quot;^4.34.9&quot;,
+        &quot;tinyglobby&quot;: &quot;^0.2.13&quot;
+      },
+      &quot;bin&quot;: {
+        &quot;vite&quot;: &quot;bin/vite.js&quot;
+      },
+      &quot;engines&quot;: {
+        &quot;node&quot;: &quot;^18.0.0 || ^20.0.0 || &gt;=22.0.0&quot;
+      },
+      &quot;funding&quot;: {
+        &quot;url&quot;: &quot;***
+      },
+      &quot;optionalDependencies&quot;: {
+        &quot;fsevents&quot;: &quot;~2.3.3&quot;
+      },
+      &quot;peerDependencies&quot;: {
+        &quot;@types/node&quot;: &quot;^18.0.0 || ^20.0.0 || &gt;=22.0.0&quot;,
+        &quot;jiti&quot;: &quot;&gt;=1.21.0&quot;,
+        &quot;less&quot;: &quot;*&quot;,
+        &quot;lightningcss&quot;: &quot;^1.21.0&quot;,
+        &quot;sass&quot;: &quot;*&quot;,
+        &quot;sass-embedded&quot;: &quot;*&quot;,
+        &quot;stylus&quot;: &quot;*&quot;,
+        &quot;sugarss&quot;: &quot;*&quot;,
+        &quot;terser&quot;: &quot;^5.16.0&quot;,
+        &quot;tsx&quot;: &quot;^4.8.1&quot;,
+        &quot;yaml&quot;: &quot;^2.4.2&quot;
+      },
+      &quot;peerDependenciesMeta&quot;: {
+        &quot;@types/node&quot;: {
+          &quot;optional&quot;: true
+        },
+        &quot;jiti&quot;: {
+          &quot;optional&quot;: true
+        },
+        &quot;less&quot;: {
+          &quot;optional&quot;: true
+        },
+        &quot;lightningcss&quot;: {
+          &quot;optional&quot;: true
+        },
+        &quot;sass&quot;: {
+          &quot;optional&quot;: true
+        },
+        &quot;sass-embedded&quot;: {
+          &quot;optional&quot;: true
+        },
+        &quot;stylus&quot;: {
+          &quot;optional&quot;: true
+        },
+        &quot;sugarss&quot;: {
+          &quot;optional&quot;: true
+        },
+        &quot;terser&quot;: {
+          &quot;optional&quot;: true
+        },
+        &quot;tsx&quot;: {
+          &quot;optional&quot;: true
+        },
+        &quot;yaml&quot;: {
+          &quot;optional&quot;: true
+        }
+      }
+    },
+    &quot;node_modules/vue&quot;: {
+      &quot;version&quot;: &quot;3.5.34&quot;,
+      &quot;resolved&quot;: &quot;***
+      &quot;integrity&quot;: &quot;sha512-WdLBG9gm02OgJIG9axd5Hpx0TFLdzVgfG2evFFu8Rur5O/IoGc5cMjnjh3tPL6GnRGsYvUhBSKVPYVcxRKpMCA==&quot;,
+      &quot;license&quot;: &quot;MIT&quot;,
+      &quot;dependencies&quot;: {
+        &quot;@vue/compiler-dom&quot;: &quot;3.5.34&quot;,
+        &quot;@vue/compiler-sfc&quot;: &quot;3.5.34&quot;,
+        &quot;@vue/runtime-dom&quot;: &quot;3.5.34&quot;,
+        &quot;@vue/server-renderer&quot;: &quot;3.5.34&quot;,
+        &quot;@vue/shared&quot;: &quot;3.5.34&quot;
+      },
+      &quot;peerDependencies&quot;: {
+        &quot;typescript&quot;: &quot;*&quot;
+      },
+      &quot;peerDependenciesMeta&quot;: {
+        &quot;typescript&quot;: {
+          &quot;optional&quot;: true
+        }
+      }
+    }
+  }
+}
+</pre>
+<h3>frontend/package.json</h3>
+<pre>{
+  &quot;name&quot;: &quot;railway-power-operation-video-ai-evaluator&quot;,
+  &quot;version&quot;: &quot;1.0.0&quot;,
+  &quot;private&quot;: true,
+  &quot;type&quot;: &quot;module&quot;,
+  &quot;scripts&quot;: {
+    &quot;dev&quot;: &quot;vite&quot;,
+    &quot;build&quot;: &quot;vite build&quot;,
+    &quot;preview&quot;: &quot;vite preview&quot;
+  },
+  &quot;dependencies&quot;: {
+    &quot;@vitejs/plugin-vue&quot;: &quot;^5.2.1&quot;,
+    &quot;vite&quot;: &quot;^6.0.3&quot;,
+    &quot;vue&quot;: &quot;^3.5.13&quot;
+  },
+  &quot;devDependencies&quot;: {}
+}
+</pre>
+<h3>frontend/src/App.vue</h3>
+<pre>&lt;script setup&gt;
+import { computed, onMounted, ref } from 'vue'
+import { api } from './services/api'
+
+const loading = ref(false)
+const message = ref('')
+const stats = ref({ total_jobs: 0, completed_jobs: 0, average_score: 0, excellent_count: 0, risk_count: 0 })
+const tasks = ref([])
+const jobs = ref([])
+const steps = ref([])
+const rules = ref([])
+const knowledge = ref([])
+const selectedJobId = ref(null)
+const detail = ref(null)
+const fileInput = ref(null)
+
+const taskForm = ref({
+  title: '接触网停电验电接地实训评价',
+  course: '铁道供电安全实训',
+  class_name: '供电 2401 班',
+  teacher: '张老师',
+  description: '围绕防护用品、工作票确认、验电、挂接地线、开关操作和复核状态进行视频智能评价。'
+})
+
+const uploadForm = ref({
+  task_id: '',
+  student_name: '李明',
+  student_no: '20260001'
+})
+
+const selectedTask = computed(() =&gt; tasks.value.find((task) =&gt; task.id === Number(uploadForm.value.task_id)))
+const completedJobs = computed(() =&gt; jobs.value.filter((job) =&gt; job.status === 'completed'))
+
+function formatTime(seconds) {
+  if (seconds === null || seconds === undefined) return '-'
+  const minute = Math.floor(seconds / 60)
+  const second = Math.floor(seconds % 60)
+  return `${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`
+}
+
+async function refreshAll() {
+  const [nextStats, nextTasks, nextJobs, nextSteps, nextRules, nextKnowledge] = await Promise.all([
+    api.stats(),
+    api.listTasks(),
+    api.listJobs(),
+    api.steps(),
+    api.rules(),
+    api.knowledge()
+  ])
+  stats.value = nextStats
+  tasks.value = nextTasks
+  jobs.value = nextJobs
+  steps.value = nextSteps
+  rules.value = nextRules
+  knowledge.value = nextKnowledge
+  if (!uploadForm.value.task_id &amp;&amp; nextTasks.length) {
+    uploadForm.value.task_id = String(nextTasks[0].id)
+  }
+  if (!selectedJobId.value &amp;&amp; nextJobs.length) {
+    await selectJob(nextJobs[0].id)
+  } else if (selectedJobId.value) {
+    await selectJob(selectedJobId.value)
+  }
+}
+
+async function createTask() {
+  loading.value = true
+  message.value = ''
+  try {
+    const task = await api.createTask(taskForm.value)
+    uploadForm.value.task_id = String(task.id)
+    message.value = '评价任务已创建'
+    await refreshAll()
+  } catch (error) {
+    message.value = error.message
+  } finally {
+    loading.value = false
+  }
+}
+
+async function uploadVideo() {
+  const file = fileInput.value?.files?.[0]
+  if (!file) {
+    message.value = '请先选择视频文件'
+    return
+  }
+  if (!uploadForm.value.task_id) {
+    message.value = '请先创建或选择评价任务'
+    return
+  }
+  loading.value = true
+  message.value = ''
+  try {
+    const formData = new FormData()
+    formData.append('task_id', uploadForm.value.task_id)
+    formData.append('student_name', uploadForm.value.student_name)
+    formData.append('student_no', uploadForm.value.student_no)
+    formData.append('file', file)
+    const result = await api.uploadSubmission(formData)
+    selectedJobId.value = result.job.id
+    message.value = '视频已上传，分析任务已创建'
+    await new Promise((resolve) =&gt; setTimeout(resolve, 600))
+    await refreshAll()
+  } catch (error) {
+    message.value = error.message
+  } finally {
+    loading.value = false
+  }
+}
+
+async function selectJob(jobId) {
+  selectedJobId.value = jobId
+  detail.value = await api.getDetail(jobId)
+}
+
+async function rerunJob() {
+  if (!selectedJobId.value) return
+  loading.value = true
+  try {
+    await api.rerun(selectedJobId.value)
+    message.value = '已重新分析'
+    await refreshAll()
+  } catch (error) {
+    message.value = error.message
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(async () =&gt; {
+  loading.value = true
+  try {
+    await refreshAll()
+  } catch (error) {
+    message.value = `后端连接失败：${error.message}`
+  } finally {
+    loading.value = false
+  }
+})
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;main class=&quot;app-shell&quot;&gt;
+    &lt;header class=&quot;topbar&quot;&gt;
+      &lt;div&gt;
+        &lt;p class=&quot;eyebrow&quot;&gt;Railway Power Operation AI Evaluator&lt;/p&gt;
+        &lt;h1&gt;铁道供电作业视频智能评价平台&lt;/h1&gt;
+      &lt;/div&gt;
+      &lt;button class=&quot;ghost-button&quot; :disabled=&quot;loading&quot; @click=&quot;refreshAll&quot;&gt;刷新&lt;/button&gt;
+    &lt;/header&gt;
+
+    &lt;section class=&quot;metrics&quot;&gt;
+      &lt;div class=&quot;metric&quot;&gt;
+        &lt;span&gt;分析任务&lt;/span&gt;
+        &lt;strong&gt;{{ stats.total_jobs }}&lt;/strong&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;metric&quot;&gt;
+        &lt;span&gt;已完成&lt;/span&gt;
+        &lt;strong&gt;{{ stats.completed_jobs }}&lt;/strong&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;metric&quot;&gt;
+        &lt;span&gt;平均分&lt;/span&gt;
+        &lt;strong&gt;{{ stats.average_score }}&lt;/strong&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;metric&quot;&gt;
+        &lt;span&gt;风险作业&lt;/span&gt;
+        &lt;strong&gt;{{ stats.risk_count }}&lt;/strong&gt;
+      &lt;/div&gt;
+    &lt;/section&gt;
+
+    &lt;p v-if=&quot;message&quot; class=&quot;message&quot;&gt;{{ message }}&lt;/p&gt;
+
+    &lt;section class=&quot;workspace&quot;&gt;
+      &lt;aside class=&quot;panel controls&quot;&gt;
+        &lt;h2&gt;基本操作&lt;/h2&gt;
+        &lt;div class=&quot;form-grid&quot;&gt;
+          &lt;label&gt;
+            &lt;span&gt;任务名称&lt;/span&gt;
+            &lt;input v-model=&quot;taskForm.title&quot; /&gt;
+          &lt;/label&gt;
+          &lt;label&gt;
+            &lt;span&gt;课程&lt;/span&gt;
+            &lt;input v-model=&quot;taskForm.course&quot; /&gt;
+          &lt;/label&gt;
+          &lt;label&gt;
+            &lt;span&gt;班级&lt;/span&gt;
+            &lt;input v-model=&quot;taskForm.class_name&quot; /&gt;
+          &lt;/label&gt;
+          &lt;label&gt;
+            &lt;span&gt;教师&lt;/span&gt;
+            &lt;input v-model=&quot;taskForm.teacher&quot; /&gt;
+          &lt;/label&gt;
+          &lt;label class=&quot;full&quot;&gt;
+            &lt;span&gt;任务说明&lt;/span&gt;
+            &lt;textarea v-model=&quot;taskForm.description&quot; rows=&quot;3&quot;&gt;&lt;/textarea&gt;
+          &lt;/label&gt;
+        &lt;/div&gt;
+        &lt;button class=&quot;primary-button&quot; :disabled=&quot;loading&quot; @click=&quot;createTask&quot;&gt;创建评价任务&lt;/button&gt;
+
+        &lt;div class=&quot;divider&quot;&gt;&lt;/div&gt;
+
+        &lt;label&gt;
+          &lt;span&gt;选择任务&lt;/span&gt;
+          &lt;select v-model=&quot;uploadForm.task_id&quot;&gt;
+            &lt;option v-for=&quot;task in tasks&quot; :key=&quot;task.id&quot; :value=&quot;String(task.id)&quot;&gt;
+              {{ task.title }}
+            &lt;/option&gt;
+          &lt;/select&gt;
+        &lt;/label&gt;
+        &lt;div class=&quot;form-grid compact&quot;&gt;
+          &lt;label&gt;
+            &lt;span&gt;学生姓名&lt;/span&gt;
+            &lt;input v-model=&quot;uploadForm.student_name&quot; /&gt;
+          &lt;/label&gt;
+          &lt;label&gt;
+            &lt;span&gt;学号&lt;/span&gt;
+            &lt;input v-model=&quot;uploadForm.student_no&quot; /&gt;
+          &lt;/label&gt;
+        &lt;/div&gt;
+        &lt;label&gt;
+          &lt;span&gt;上传视频&lt;/span&gt;
+          &lt;input ref=&quot;fileInput&quot; type=&quot;file&quot; accept=&quot;video/*,.txt,.mp4,.mov,.avi&quot; /&gt;
+        &lt;/label&gt;
+        &lt;button class=&quot;primary-button&quot; :disabled=&quot;loading&quot; @click=&quot;uploadVideo&quot;&gt;上传并分析&lt;/button&gt;
+        &lt;p v-if=&quot;selectedTask&quot; class=&quot;hint&quot;&gt;当前任务：{{ selectedTask.class_name }} / {{ selectedTask.teacher }}&lt;/p&gt;
+      &lt;/aside&gt;
+
+      &lt;section class=&quot;panel result-panel&quot;&gt;
+        &lt;div class=&quot;section-header&quot;&gt;
+          &lt;h2&gt;评分结果&lt;/h2&gt;
+          &lt;button class=&quot;ghost-button&quot; :disabled=&quot;!selectedJobId || loading&quot; @click=&quot;rerunJob&quot;&gt;重新分析&lt;/button&gt;
+        &lt;/div&gt;
+
+        &lt;div class=&quot;job-list&quot;&gt;
+          &lt;button
+            v-for=&quot;job in jobs&quot;
+            :key=&quot;job.id&quot;
+            class=&quot;job-item&quot;
+            :class=&quot;{ active: job.id === selectedJobId }&quot;
+            @click=&quot;selectJob(job.id)&quot;
+          &gt;
+            &lt;span&gt;#{{ job.id }} {{ job.status }}&lt;/span&gt;
+            &lt;strong&gt;{{ job.score }} 分&lt;/strong&gt;
+          &lt;/button&gt;
+        &lt;/div&gt;
+
+        &lt;div v-if=&quot;detail&quot; class=&quot;detail-grid&quot;&gt;
+          &lt;div class=&quot;video-pane&quot;&gt;
+            &lt;video
+              v-if=&quot;detail.submission&quot;
+              controls
+              :src=&quot;api.videoUrl(detail.submission.id)&quot;
+            &gt;&lt;/video&gt;
+            &lt;div class=&quot;report-card&quot;&gt;
+              &lt;span class=&quot;score&quot;&gt;{{ detail.job.score }}&lt;/span&gt;
+              &lt;div&gt;
+                &lt;h3&gt;{{ detail.report?.conclusion || detail.job.summary || '等待分析完成' }}&lt;/h3&gt;
+                &lt;p&gt;{{ detail.report?.strengths }}&lt;/p&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+
+          &lt;div class=&quot;evidence-pane&quot;&gt;
+            &lt;h3&gt;标准流程识别&lt;/h3&gt;
+            &lt;ol class=&quot;timeline&quot;&gt;
+              &lt;li v-for=&quot;step in detail.steps&quot; :key=&quot;step.id&quot;&gt;
+                &lt;time&gt;{{ formatTime(step.start_sec) }}&lt;/time&gt;
+                &lt;div&gt;
+                  &lt;strong&gt;{{ step.step_name }}&lt;/strong&gt;
+                  &lt;p&gt;{{ step.evidence }}&lt;/p&gt;
+                &lt;/div&gt;
+              &lt;/li&gt;
+            &lt;/ol&gt;
+
+            &lt;h3&gt;扣分项&lt;/h3&gt;
+            &lt;div v-if=&quot;detail.violations.length&quot; class=&quot;violations&quot;&gt;
+              &lt;article v-for=&quot;item in detail.violations&quot; :key=&quot;item.id&quot; class=&quot;violation&quot;&gt;
+                &lt;div&gt;
+                  &lt;strong&gt;{{ item.title }}&lt;/strong&gt;
+                  &lt;span&gt;{{ item.severity }} / 扣 {{ item.deduction }} 分&lt;/span&gt;
+                &lt;/div&gt;
+                &lt;p&gt;{{ item.reason }}&lt;/p&gt;
+                &lt;small&gt;{{ item.suggestion }}&lt;/small&gt;
+              &lt;/article&gt;
+            &lt;/div&gt;
+            &lt;p v-else class=&quot;empty&quot;&gt;暂无硬性规则扣分项&lt;/p&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;div v-else class=&quot;empty-state&quot;&gt;
+          创建任务并上传视频后，这里会显示 AI 证据、扣分项和评价报告。
+        &lt;/div&gt;
+      &lt;/section&gt;
+    &lt;/section&gt;
+
+    &lt;section class=&quot;reference-grid&quot;&gt;
+      &lt;div class=&quot;panel&quot;&gt;
+        &lt;h2&gt;评分规则&lt;/h2&gt;
+        &lt;ul class=&quot;plain-list&quot;&gt;
+          &lt;li v-for=&quot;rule in rules&quot; :key=&quot;rule.id&quot;&gt;
+            &lt;strong&gt;{{ rule.title }}&lt;/strong&gt;
+            &lt;span&gt;扣 {{ rule.deduction }} 分&lt;/span&gt;
+          &lt;/li&gt;
+        &lt;/ul&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;panel&quot;&gt;
+        &lt;h2&gt;标准步骤&lt;/h2&gt;
+        &lt;ul class=&quot;plain-list&quot;&gt;
+          &lt;li v-for=&quot;step in steps&quot; :key=&quot;step.id&quot;&gt;
+            &lt;strong&gt;{{ step.order_index }}. {{ step.name }}&lt;/strong&gt;
+            &lt;span&gt;{{ step.required ? '必需' : '可选' }}&lt;/span&gt;
+          &lt;/li&gt;
+        &lt;/ul&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;panel&quot;&gt;
+        &lt;h2&gt;知识库&lt;/h2&gt;
+        &lt;ul class=&quot;plain-list docs&quot;&gt;
+          &lt;li v-for=&quot;doc in knowledge&quot; :key=&quot;doc.id&quot;&gt;
+            &lt;strong&gt;{{ doc.title }}&lt;/strong&gt;
+            &lt;span&gt;{{ doc.category }}&lt;/span&gt;
+          &lt;/li&gt;
+        &lt;/ul&gt;
+      &lt;/div&gt;
+    &lt;/section&gt;
+  &lt;/main&gt;
+&lt;/template&gt;
+</pre>
+<h3>frontend/src/main.js</h3>
+<pre>import { createApp } from 'vue'
+import App from './App.vue'
+import './styles.css'
+
+createApp(App).mount('#app')
+</pre>
+<h3>frontend/src/services/api.js</h3>
+<pre>const API_BASE = import.meta.env.VITE_API_BASE || '***
+
+async function request(path, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, options)
+  if (!response.ok) {
+    const detail = await response.text()
+    throw new Error(detail || `HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export const api = {
+  base: API_BASE,
+  health: () =&gt; request('/api/health'),
+  stats: () =&gt; request('/api/analysis/stats/overview'),
+  listTasks: () =&gt; request('/api/tasks'),
+  createTask: (payload) =&gt;
+    request('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }),
+  listSubmissions: (taskId) =&gt; request(`/api/submissions${taskId ? `?task_id=${taskId}` : ''}`),
+  listJobs: () =&gt; request('/api/analysis/jobs'),
+  getDetail: (jobId) =&gt; request(`/api/analysis/jobs/${jobId}/detail`),
+  rerun: (jobId) =&gt; request(`/api/analysis/jobs/${jobId}/rerun`, { method: 'POST' }),
+  steps: () =&gt; request('/api/catalog/steps'),
+  rules: () =&gt; request('/api/catalog/rules'),
+  knowledge: () =&gt; request('/api/catalog/knowledge'),
+  videoUrl: (submissionId) =&gt; `${API_BASE}/api/submissions/${submissionId}/video`,
+  uploadSubmission: (formData) =&gt;
+    request('/api/submissions', {
+      method: 'POST',
+      body: formData
+    })
+}
+</pre>
+<h3>frontend/src/styles.css</h3>
+<pre>:root {
+  font-family: &quot;Inter&quot;, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, Arial, sans-serif;
+  color: #17202a;
+  background: #f5f7fa;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #607084;
+  font-size: 13px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 0;
+  font-size: clamp(26px, 4vw, 40px);
+  letter-spacing: 0;
+}
+
+h2 {
+  font-size: 18px;
+  margin-bottom: 16px;
+}
+
+h3 {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.metric,
+.panel {
+  background: #ffffff;
+  border: 1px solid #dde4ed;
+  border-radius: 8px;
+}
+
+.metric {
+  padding: 16px;
+}
+
+.metric span {
+  display: block;
+  color: #607084;
+  margin-bottom: 8px;
+}
+
+.metric strong {
+  font-size: 30px;
+}
+
+.message {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #fff7e6;
+  border: 1px solid #f0c36d;
+  color: #6f4d00;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.panel {
+  padding: 18px;
+}
+
+.controls {
+  position: sticky;
+  top: 16px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: #44546a;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #17202a;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-grid.compact {
+  gap: 10px;
+}
+
+.full {
+  grid-column: 1 / -1;
+}
+
+.primary-button,
+.ghost-button {
+  min-height: 40px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.primary-button {
+  width: 100%;
+  background: #176b87;
+  color: #ffffff;
+}
+
+.ghost-button {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #243447;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.divider {
+  height: 1px;
+  background: #e5eaf0;
+  margin: 18px 0;
+}
+
+.hint,
+.empty,
+.empty-state {
+  color: #607084;
+}
+
+.result-panel {
+  min-height: 620px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.job-list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  margin-bottom: 16px;
+}
+
+.job-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid #d5dde7;
+  background: #ffffff;
+}
+
+.job-item.active {
+  border-color: #176b87;
+  background: #e8f6fa;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 44%) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.video-pane video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #111827;
+  border-radius: 8px;
+  border: 1px solid #d5dde7;
+}
+
+.report-card {
+  display: flex;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid #d5dde7;
+  background: #f8fafc;
+}
+
+.score {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #176b87;
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.timeline {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 18px;
+}
+
+.timeline li {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #edf1f5;
+}
+
+.timeline time {
+  color: #176b87;
+  font-weight: 700;
+}
+
+.timeline p,
+.violation p,
+.report-card p {
+  margin-bottom: 0;
+  color: #607084;
+  line-height: 1.55;
+}
+
+.violations {
+  display: grid;
+  gap: 10px;
+}
+
+.violation {
+  border: 1px solid #f0c1bd;
+  background: #fff7f6;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.violation div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.violation span,
+.violation small {
+  color: #8a3b35;
+}
+
+.reference-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.plain-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.plain-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.plain-list span {
+  color: #607084;
+  white-space: nowrap;
+}
+
+.docs li {
+  align-items: flex-start;
+}
+
+@media (max-width: 1120px) {
+  .workspace,
+  .detail-grid,
+  .reference-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .controls {
+    position: static;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 14px;
+  }
+
+  .topbar,
+  .section-header,
+  .violation div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .metrics,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</pre>
+<h3>frontend/vite.config.js</h3>
+<pre>import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+
+export default defineConfig({
+  plugins: [vue()],
+  server: {
+    host: '***',
+    port: 5173
+  }
+})
+</pre></body></html>
